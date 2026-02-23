@@ -78,6 +78,7 @@ def _extract_title(md_text: str) -> str:
 async def analyze(
     file: UploadFile = File(...),
     target_month: str = Form(default=""),
+    next_month_business_days: int = Form(default=0),
 ):
     """엑셀 파일을 분석하여 리포트를 생성합니다."""
     if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
@@ -89,6 +90,7 @@ async def analyze(
         structured_data = extract_structured_data(
             file_bytes,
             target_month if target_month else None,
+            next_month_business_days=next_month_business_days,
         )
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"엑셀 파싱 오류: {str(e)}")

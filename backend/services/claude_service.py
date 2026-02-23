@@ -73,6 +73,8 @@ def _build_user_prompt(structured_data: dict) -> str:
 
 {structured_data['conversion_rates']}
 
+{f"익월 영업일수: {structured_data['next_month_business_days']}일 (사용자 입력)" if structured_data.get('next_month_business_days') else ""}
+
 === 리포트 템플릿 (이 구조를 정확히 따르세요) ===
 
 # {target_month} 실적 분석 & {next_month}월 전망 리포트
@@ -189,6 +191,7 @@ TOP 10 + 기타* + 합계. 기타 각주에 세부 직군(건수) 나열.
 ### 8. {next_month}월 예측 (파이프라인 기반)
 
 #### 8-1. 영업일 보정
+{'> 📌 사용자 제공 익월 영업일수를 사용하세요. 추정하지 마세요.' if structured_data.get('next_month_business_days') else ''}
 | 항목 | {month}월 | {next_month}월 (예상) | 비율 |
 
 #### 8-2. 파이프라인 기반 합격 예측

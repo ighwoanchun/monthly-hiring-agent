@@ -28,12 +28,16 @@ export interface SlackResult {
 
 export async function analyzeExcel(
   file: File,
-  targetMonth?: string
+  targetMonth?: string,
+  nextMonthBusinessDays?: number
 ): Promise<AnalysisResult> {
   const formData = new FormData();
   formData.append("file", file);
   if (targetMonth) {
     formData.append("target_month", targetMonth);
+  }
+  if (nextMonthBusinessDays) {
+    formData.append("next_month_business_days", String(nextMonthBusinessDays));
   }
 
   const res = await fetch(`${API_BASE}/api/analyze`, {

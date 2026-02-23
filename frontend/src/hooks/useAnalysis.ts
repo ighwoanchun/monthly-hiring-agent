@@ -23,7 +23,7 @@ export function useAnalysis() {
   const [confluenceUrl, setConfluenceUrl] = useState<string | null>(null);
   const [slackSent, setSlackSent] = useState(false);
 
-  const analyze = useCallback(async (file: File, targetMonth?: string) => {
+  const analyze = useCallback(async (file: File, targetMonth?: string, nextMonthBusinessDays?: number) => {
     setStatus("uploading");
     setError(null);
     setResult(null);
@@ -32,7 +32,7 @@ export function useAnalysis() {
 
     try {
       setStatus("analyzing");
-      const data = await analyzeExcel(file, targetMonth);
+      const data = await analyzeExcel(file, targetMonth, nextMonthBusinessDays);
       setResult(data);
       setStatus("done");
     } catch (e) {

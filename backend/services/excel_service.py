@@ -33,7 +33,7 @@ def load_data_from_bytes(file_bytes: bytes) -> tuple:
     return monthly, apply_raw, hire_raw
 
 
-def extract_structured_data(file_bytes: bytes, target_month: str | None = None) -> dict:
+def extract_structured_data(file_bytes: bytes, target_month: str | None = None, *, next_month_business_days: int = 0) -> dict:
     """엑셀에서 모든 분석 데이터를 구조화된 텍스트로 추출합니다.
 
     Returns:
@@ -99,6 +99,7 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None) 
         "pipeline_analysis": pipeline_text,
         "apply_size_analysis": apply_size_text,
         "conversion_rates": conversion_text,
+        "next_month_business_days": next_month_business_days,
     }
 
 

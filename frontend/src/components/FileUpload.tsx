@@ -3,13 +3,14 @@
 import { useState, useRef, DragEvent } from "react";
 
 interface FileUploadProps {
-  onSubmit: (file: File, targetMonth?: string) => void;
+  onSubmit: (file: File, targetMonth?: string, nextMonthBusinessDays?: number) => void;
   disabled?: boolean;
 }
 
 export default function FileUpload({ onSubmit, disabled }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [targetMonth, setTargetMonth] = useState("");
+  const [businessDays, setBusinessDays] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -28,7 +29,10 @@ export default function FileUpload({ onSubmit, disabled }: FileUploadProps) {
   };
 
   const handleSubmit = () => {
-    if (file) onSubmit(file, targetMonth || undefined);
+    if (file) {
+      const days = businessDays ? parseInt(businessDays, 10) : undefined;
+      onSubmit(file, targetMonth || undefined, days || undefined);
+    }
   };
 
   return (
@@ -97,6 +101,20 @@ export default function FileUpload({ onSubmit, disabled }: FileUploadProps) {
             placeholder="예: 2026-01 (비워두면 자동 감지)"
             value={targetMonth}
             onChange={(e) => setTargetMonth(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="w-40">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            익월 영업일수 (선택)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="31"
+            placeholder="예: 22"
+            value={businessDays}
+            onChange={(e) => setBusinessDays(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
