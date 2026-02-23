@@ -88,11 +88,11 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None, 
     # 9. 전환율 참조
     conversion_text = _format_conversion_rates()
 
-    # 10. 파이프라인 기반 합격 예측 (8-2용)
-    pipeline_prediction = _format_pipeline_prediction(apply_raw, tm)
+    # 10. 파이프라인 기반 합격 예측 (8-1용)
+    pipeline_prediction = _format_pipeline_prediction(apply_raw, monthly, tm)
 
-    # 11. 직군별 익월 파이프라인 트렌드 (8-3용)
-    job_pipeline_trend = _format_job_pipeline_trend(apply_raw, tm)
+    # 11. 직군별 익월 파이프라인 트렌드 (8-2용)
+    job_pipeline_trend = _format_job_pipeline_trend(apply_raw, monthly, tm)
 
     return {
         "target_month": month_label,
@@ -293,26 +293,51 @@ def _format_apply_by_size(apply_raw: pd.DataFrame, target_month) -> str:
     return "\n".join(lines)
 
 
-def _format_pipeline_prediction(apply_raw: pd.DataFrame, target_month) -> str:
-    """8-2. 이전 월 서류통과 수 데이터를 제공하여 익월 합격 예측에 사용."""
+def _calc_hire_doc_pass_rate(apply_raw: pd.DataFrame, monthly: pd.DataFrame) -> float:
+    """실제 전환율 계산: 월별 hire_cnt / 전월 doc_pass_count 평균."""
+    sorted_months = sorted(monthly["report_month"].unique())
+    rates = []
+    for m in sorted_months:
+        hire = monthly[monthly["report_month"] == m]["hire_cnt"].iloc[0]
+        prev_m = m - pd.DateOffset(months=1)
+        prev_doc = apply_raw[apply_raw["apply_month"] == prev_m]["doc_pass_count"].sum()
+        if prev_doc > 0:
+            rates.append(hire / prev_doc)
+    return sum(rates) / len(rates) if rates else 0.10
+
+
+def _format_pipeline_prediction(apply_raw: pd.DataFrame, monthly: pd.DataFrame, target_month) -> str:
+    """8-1. 파이프라인 기반 합격 예측 — 실제 전환율 사용."""
     next_month_num = target_month.month + 1 if target_month.month < 12 else 1
-    pr = CONVERSION_RATES["pass_to_hire"]
+    avg_rate = _calc_hire_doc_pass_rate(apply_raw, monthly)
+
+    # 각 월의 서류통과 수와 예상 기여분
+    dist = CONVERSION_RATES["pass_to_hire"]
+    current_hire = monthly[monthly["report_month"] == target_month]["hire_cnt"].iloc[0]
 
     months_data = []
-    for offset, rate_key, rate_val in [
-        (0, "당월→익월 (37.5%)", pr["prev_1"]),
-        (1, "전월→익월 (14.0%)", pr["prev_2"]),
-        (2, "전전월→익월 (7.5%)", pr["prev_3"]),
-    ]:
+    for offset, dist_pct in [(0, dist["prev_1"]), (1, dist["prev_2"]), (2, dist["prev_3"])]:
         m = target_month - pd.DateOffset(months=offset)
         data = apply_raw[apply_raw["apply_month"] == m]
         doc_pass = data["doc_pass_count"].sum() if not data.empty else 0
-        expected = doc_pass * rate_val
+        # 실제 전환율 = (당월합격 × 분포비율) / 해당월 서류통과수
+        if doc_pass > 0:
+            actual_rate = (current_hire * dist_pct) / doc_pass
+        else:
+            actual_rate = 0
+        expected = doc_pass * actual_rate
         m_label = f"{m.month}월 서류통과→{next_month_num}월"
-        months_data.append((m_label, doc_pass, rate_val * 100, expected))
+        months_data.append((m_label, doc_pass, actual_rate * 100, expected))
+
+    # 기본 예측 (전체 전환율 기반)
+    cur_doc = apply_raw[apply_raw["apply_month"] == target_month]["doc_pass_count"].sum()
+    base_prediction = cur_doc * avg_rate
 
     lines = [f"[파이프라인 기반 합격 예측 - {next_month_num}월]"]
-    lines.append("| 파이프라인 소스 | 수량 | 전환율 | 예상 합격 |")
+    lines.append(f"기준 전환율: {avg_rate*100:.1f}% (최근 합격수÷전월서류통과 평균)")
+    lines.append(f"기본 예측: {target_month.month}월 서류통과 {cur_doc:,.0f}명 × {avg_rate*100:.1f}% = **{base_prediction:,.0f}명**")
+    lines.append("")
+    lines.append("| 파이프라인 소스 | 서류통과 수 | 실제 전환율 | 예상 기여 합격 |")
     lines.append("|---|---|---|---|")
 
     total_expected = 0
@@ -320,15 +345,20 @@ def _format_pipeline_prediction(apply_raw: pd.DataFrame, target_month) -> str:
         lines.append(f"| {label} | {qty:,.0f} | {rate:.1f}% | {exp:,.0f} |")
         total_expected += exp
 
-    lines.append(f"| **합계 (이론적 최대치)** | | | **{total_expected:,.0f}** |")
+    # 당월+기타 기여분 추산
+    known_dist = dist["prev_1"] + dist["prev_2"] + dist["prev_3"]
+    other_expected = total_expected * (1 - known_dist) / known_dist if known_dist > 0 else 0
+    lines.append(f"| 당월+기타 소스 (추정) | - | - | {other_expected:,.0f} |")
+    lines.append(f"| **합계** | | | **{total_expected + other_expected:,.0f}** |")
+
     return "\n".join(lines)
 
 
-def _format_job_pipeline_trend(apply_raw: pd.DataFrame, target_month) -> str:
-    """8-3. 직군별 익월 파이프라인 + 전월 대비 트렌드."""
+def _format_job_pipeline_trend(apply_raw: pd.DataFrame, monthly: pd.DataFrame, target_month) -> str:
+    """8-2. 직군별 익월 파이프라인 + 전월 대비 트렌드."""
     prev_month = target_month - pd.DateOffset(months=1)
     next_month_num = target_month.month + 1 if target_month.month < 12 else 1
-    rate = CONVERSION_RATES["pass_to_hire"]["prev_1"]  # 37.5%
+    rate = _calc_hire_doc_pass_rate(apply_raw, monthly)
 
     cur_data = apply_raw[apply_raw["apply_month"] == target_month]
     prev_data = apply_raw[apply_raw["apply_month"] == prev_month]
@@ -346,8 +376,8 @@ def _format_job_pipeline_trend(apply_raw: pd.DataFrame, target_month) -> str:
     )
     merged = merged.sort_values("doc_pass_count", ascending=False)
 
-    lines = [f"[직군별 {next_month_num}월 파이프라인]"]
-    lines.append(f"| 직군 | {target_month.month}월 서류통과 | 예상 {next_month_num}월 합격 ({rate*100:.1f}%) | 전월 대비 | 트렌드 |")
+    lines = [f"[직군별 {next_month_num}월 파이프라인 (전환율 {rate*100:.1f}%)]"]
+    lines.append(f"| 직군 | {target_month.month}월 서류통과 | 예상 {next_month_num}월 합격 | 전월 대비 | 트렌드 |")
     lines.append("|---|---|---|---|---|")
 
     for _, r in merged.head(10).iterrows():
