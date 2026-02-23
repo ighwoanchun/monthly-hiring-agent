@@ -88,6 +88,12 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None, 
     # 9. 전환율 참조
     conversion_text = _format_conversion_rates()
 
+    # 10. 파이프라인 기반 합격 예측 (8-2용)
+    pipeline_prediction = _format_pipeline_prediction(apply_raw, tm)
+
+    # 11. 직군별 익월 파이프라인 트렌드 (8-3용)
+    job_pipeline_trend = _format_job_pipeline_trend(apply_raw, tm)
+
     return {
         "target_month": month_label,
         "summary": summary_text,
@@ -99,6 +105,8 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None, 
         "pipeline_analysis": pipeline_text,
         "apply_size_analysis": apply_size_text,
         "conversion_rates": conversion_text,
+        "pipeline_prediction": pipeline_prediction,
+        "job_pipeline_trend": job_pipeline_trend,
         "next_month_business_days": next_month_business_days,
     }
 
@@ -201,10 +209,40 @@ def _format_leadtime(hire_raw: pd.DataFrame, target_month) -> str:
     if data.empty:
         return "[리드타임 분석]\n데이터 없음"
 
-    total_lt = weighted_avg(data, "total_lead_time", "hire_count")
+    # 전월 구하기
+    prev_month = target_month - pd.DateOffset(months=1)
+    prev_data = hire_raw[hire_raw["hire_month"] == prev_month]
 
-    lines = ["[리드타임 분석]"]
-    lines.append(f"- 전체 가중평균 리드타임: {total_lt:.1f}일")
+    steps = [
+        ("lead_time_to_doc_pass", "지원→서류통과"),
+        ("lead_time_doc_pass_to_hire", "서류통과→최종합격"),
+        ("total_lead_time", "전체 리드타임"),
+    ]
+
+    prev_label = f"{prev_month.month}월" if not prev_data.empty else "전월"
+    cur_label = f"{target_month.month}월"
+
+    lines = ["[리드타임 분석 - 단계별 소요 기간 (전월 비교)]"]
+    lines.append(f"| 단계 | {prev_label} | {cur_label} | 변화 | 상태 |")
+    lines.append("|---|---|---|---|---|")
+
+    for col, label in steps:
+        cur_val = weighted_avg(data, col, "hire_count")
+        prev_val = weighted_avg(prev_data, col, "hire_count") if not prev_data.empty else float("nan")
+
+        cur_str = f"{cur_val:.1f}일" if not pd.isna(cur_val) else "-"
+        prev_str = f"{prev_val:.1f}일" if not pd.isna(prev_val) else "-"
+
+        if not pd.isna(cur_val) and not pd.isna(prev_val):
+            diff = cur_val - prev_val
+            diff_str = f"{diff:+.1f}일"
+            emoji = get_status_emoji(calc_mom(cur_val, prev_val))
+        else:
+            diff_str = "-"
+            emoji = "➡️"
+
+        lines.append(f"| {label} | {prev_str} | {cur_str} | {diff_str} | {emoji} |")
+
     return "\n".join(lines)
 
 
@@ -252,6 +290,77 @@ def _format_apply_by_size(apply_raw: pd.DataFrame, target_month) -> str:
             f"| {name} | {r['applicant_count']:.0f} | {r['doc_pass_count']:.0f} "
             f"| {r['pass_rate']:.1f}% | {r['pipeline']:.0f} |"
         )
+    return "\n".join(lines)
+
+
+def _format_pipeline_prediction(apply_raw: pd.DataFrame, target_month) -> str:
+    """8-2. 이전 월 서류통과 수 데이터를 제공하여 익월 합격 예측에 사용."""
+    next_month_num = target_month.month + 1 if target_month.month < 12 else 1
+    pr = CONVERSION_RATES["pass_to_hire"]
+
+    months_data = []
+    for offset, rate_key, rate_val in [
+        (0, "당월→익월 (37.5%)", pr["prev_1"]),
+        (1, "전월→익월 (14.0%)", pr["prev_2"]),
+        (2, "전전월→익월 (7.5%)", pr["prev_3"]),
+    ]:
+        m = target_month - pd.DateOffset(months=offset)
+        data = apply_raw[apply_raw["apply_month"] == m]
+        doc_pass = data["doc_pass_count"].sum() if not data.empty else 0
+        expected = doc_pass * rate_val
+        m_label = f"{m.month}월 서류통과→{next_month_num}월"
+        months_data.append((m_label, doc_pass, rate_val * 100, expected))
+
+    lines = [f"[파이프라인 기반 합격 예측 - {next_month_num}월]"]
+    lines.append("| 파이프라인 소스 | 수량 | 전환율 | 예상 합격 |")
+    lines.append("|---|---|---|---|")
+
+    total_expected = 0
+    for label, qty, rate, exp in months_data:
+        lines.append(f"| {label} | {qty:,.0f} | {rate:.1f}% | {exp:,.0f} |")
+        total_expected += exp
+
+    lines.append(f"| **합계 (이론적 최대치)** | | | **{total_expected:,.0f}** |")
+    return "\n".join(lines)
+
+
+def _format_job_pipeline_trend(apply_raw: pd.DataFrame, target_month) -> str:
+    """8-3. 직군별 익월 파이프라인 + 전월 대비 트렌드."""
+    prev_month = target_month - pd.DateOffset(months=1)
+    next_month_num = target_month.month + 1 if target_month.month < 12 else 1
+    rate = CONVERSION_RATES["pass_to_hire"]["prev_1"]  # 37.5%
+
+    cur_data = apply_raw[apply_raw["apply_month"] == target_month]
+    prev_data = apply_raw[apply_raw["apply_month"] == prev_month]
+
+    cur_by_job = cur_data.groupby("job_category")["doc_pass_count"].sum().reset_index()
+    prev_by_job = prev_data.groupby("job_category")["doc_pass_count"].sum().reset_index()
+
+    merged = cur_by_job.merge(prev_by_job, on="job_category", how="left", suffixes=("", "_prev"))
+    merged["expected_hire"] = merged["doc_pass_count"] * rate
+    merged["mom"] = merged.apply(
+        lambda r: calc_mom(r["doc_pass_count"], r["doc_pass_count_prev"])
+        if not pd.isna(r.get("doc_pass_count_prev")) and r.get("doc_pass_count_prev", 0) > 0
+        else float("nan"),
+        axis=1,
+    )
+    merged = merged.sort_values("doc_pass_count", ascending=False)
+
+    lines = [f"[직군별 {next_month_num}월 파이프라인]"]
+    lines.append(f"| 직군 | {target_month.month}월 서류통과 | 예상 {next_month_num}월 합격 ({rate*100:.1f}%) | 전월 대비 | 트렌드 |")
+    lines.append("|---|---|---|---|---|")
+
+    for _, r in merged.head(10).iterrows():
+        doc = f"{r['doc_pass_count']:,.0f}"
+        exp = f"{r['expected_hire']:,.0f}"
+        if not pd.isna(r["mom"]):
+            mom_str = f"{r['mom']:+.1f}%"
+            emoji = get_status_emoji(r["mom"])
+        else:
+            mom_str = "-"
+            emoji = "➡️"
+        lines.append(f"| {r['job_category']} | {doc} | {exp} | {mom_str} | {emoji} |")
+
     return "\n".join(lines)
 
 

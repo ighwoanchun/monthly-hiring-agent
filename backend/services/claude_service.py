@@ -73,6 +73,10 @@ def _build_user_prompt(structured_data: dict) -> str:
 
 {structured_data['conversion_rates']}
 
+{structured_data['pipeline_prediction']}
+
+{structured_data['job_pipeline_trend']}
+
 {f"익월 영업일수: {structured_data['next_month_business_days']}일 (사용자 입력)" if structured_data.get('next_month_business_days') else ""}
 
 === 리포트 템플릿 (이 구조를 정확히 따르세요) ===
@@ -130,10 +134,7 @@ TOP 10 + 기타* + 합계. 기타 각주에 세부 직군(건수) 나열.
 **핵심 고객군:** / **리드타임 패턴:** 소제목으로 분석
 
 #### 4-3. 채용 리드타임 상세
-**단계별 소요 기간 (전월 비교)**
-
-| 단계 | {prev_month_label} | {month}월 | 변화 | 상태 |
-지원→서류통과, 서류통과→최종합격, 전체 리드타임 각 행
+> 📌 데이터 섹션의 "[리드타임 분석 - 단계별 소요 기간]" 테이블을 그대로 사용하세요. 빈 셀 없이 모든 값을 포함하세요.
 
 💡 **리드타임 인사이트**: 60일 돌파 등 핵심 이슈 분석
 
@@ -190,20 +191,16 @@ TOP 10 + 기타* + 합계. 기타 각주에 세부 직군(건수) 나열.
 
 ### 8. {next_month}월 예측 (파이프라인 기반)
 
-#### 8-1. 영업일 보정
-{'> 📌 사용자 제공 익월 영업일수를 사용하세요. 추정하지 마세요.' if structured_data.get('next_month_business_days') else ''}
-| 항목 | {month}월 | {next_month}월 (예상) | 비율 |
-
-#### 8-2. 파이프라인 기반 합격 예측
-| 파이프라인 소스 | 수량 | 전환율 | 예상 {next_month}월 합격 |
-{month}월 서류통과→{next_month}월, {prev_month_label} 서류통과→{next_month}월, 전전월 서류통과→{next_month}월
+#### 8-1. 파이프라인 기반 합격 예측
+> 📌 아래 데이터의 수치를 그대로 사용하세요. 임의로 비우지 마세요.
+데이터 섹션의 "[파이프라인 기반 합격 예측]" 테이블을 그대로 사용하되, 합계 행 아래에 실제 예상 범위 추가.
 
 > ⚠️ **주의**: 위 수치는 이론적 최대치. 실제로는 (범위) 예상
 
-#### 8-3. 직군별 {next_month}월 파이프라인
-| 직군 | {month}월 서류통과 | 예상 {next_month}월 합격 (37.5%) | 트렌드 |
+#### 8-2. 직군별 {next_month}월 파이프라인
+> 📌 데이터 섹션의 "[직군별 {next_month}월 파이프라인]" 테이블을 그대로 사용하세요. 트렌드 컬럼을 반드시 포함하세요.
 
-#### 8-4. 시나리오별 {next_month}월 전망
+#### 8-3. 시나리오별 {next_month}월 전망
 **💰 매출 시나리오**
 
 | 시나리오 | 예측 매출 | 가정 |
