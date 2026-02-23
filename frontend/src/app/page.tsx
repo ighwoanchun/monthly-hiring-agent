@@ -40,9 +40,19 @@ export default function Home() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         {status === "idle" && (
           <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              엑셀 파일 업로드
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">
+                엑셀 파일 업로드
+              </h2>
+              <a
+                href="https://docs.google.com/spreadsheets/d/14vBJ_cKXyx-4neyASyalHtKvEKHDcgaGVKA3SScvZIQ/edit?gid=803855290#gid=803855290"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+              >
+                지표분석용 데이터 &rarr;
+              </a>
+            </div>
             <FileUpload onSubmit={analyze} />
           </section>
         )}
