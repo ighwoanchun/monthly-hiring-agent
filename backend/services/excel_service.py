@@ -333,23 +333,19 @@ def _format_pipeline_prediction(apply_raw: pd.DataFrame, monthly: pd.DataFrame, 
     cur_doc = apply_raw[apply_raw["apply_month"] == target_month]["doc_pass_count"].sum()
     base_prediction = cur_doc * avg_rate
 
-    lines = [f"[파이프라인 기반 합격 예측 - {next_month_num}월]"]
-    lines.append(f"기준 전환율: {avg_rate*100:.1f}% (최근 합격수÷전월서류통과 평균)")
-    lines.append(f"기본 예측: {target_month.month}월 서류통과 {cur_doc:,.0f}명 × {avg_rate*100:.1f}% = **{base_prediction:,.0f}명**")
-    lines.append("")
+    # 당월+기타 기여분 추산
+    total_from_sources = sum(exp for _, _, _, exp in months_data)
+    known_dist = dist["prev_1"] + dist["prev_2"] + dist["prev_3"]
+    other_expected = total_from_sources * (1 - known_dist) / known_dist if known_dist > 0 else 0
+    total_expected = total_from_sources + other_expected
+
+    lines = [f"[파이프라인 기반 합격 예측 - {next_month_num}월 (기준 전환율 {avg_rate*100:.1f}%)]"]
     lines.append("| 파이프라인 소스 | 서류통과 수 | 실제 전환율 | 예상 기여 합격 |")
     lines.append("|---|---|---|---|")
-
-    total_expected = 0
     for label, qty, rate, exp in months_data:
         lines.append(f"| {label} | {qty:,.0f} | {rate:.1f}% | {exp:,.0f} |")
-        total_expected += exp
-
-    # 당월+기타 기여분 추산
-    known_dist = dist["prev_1"] + dist["prev_2"] + dist["prev_3"]
-    other_expected = total_expected * (1 - known_dist) / known_dist if known_dist > 0 else 0
     lines.append(f"| 당월+기타 소스 (추정) | - | - | {other_expected:,.0f} |")
-    lines.append(f"| **합계** | | | **{total_expected + other_expected:,.0f}** |")
+    lines.append(f"| **합계** | | | **{total_expected:,.0f}** |")
 
     return "\n".join(lines)
 
