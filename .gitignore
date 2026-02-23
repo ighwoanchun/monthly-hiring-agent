@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+node_modules/
+.next/
+.DS_Store
+.playwright-mcp/
+screenshot-*.png
+data/
