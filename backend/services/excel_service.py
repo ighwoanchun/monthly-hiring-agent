@@ -97,6 +97,7 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None, 
     return {
         "target_month": month_label,
         "summary": summary_text,
+        "summary_raw": summary,
         "monthly_kpi": monthly_kpi,
         "revenue_breakdown": revenue,
         "job_analysis": job_text,

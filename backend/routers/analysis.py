@@ -2,6 +2,7 @@
 
 import re
 
+import numpy as np
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from services.excel_service import extract_structured_data
@@ -74,6 +75,72 @@ def _extract_title(md_text: str) -> str:
     return "월간 채용 분석 리포트"
 
 
+def _build_indicators_from_data(summary_raw: dict) -> list[dict]:
+    """구조화된 데이터에서 직접 Executive Summary 지표를 생성합니다.
+
+    Gemini 마크다운 파싱 대신 정확한 계산값을 사용합니다.
+    """
+
+    def _grade(mom):
+        """MoM 기반 등급 (리드타임은 반전)"""
+        if np.isnan(mom):
+            return "🟡", "Alert"
+        if mom > 5:
+            return "🟢", "Good"
+        if mom < -5:
+            return "🔴", "Alert"
+        return "🟡", "Alert"
+
+    def _grade_inverted(mom):
+        """리드타임은 감소가 긍정, 증가가 부정"""
+        if np.isnan(mom):
+            return "🟡", "Alert"
+        if mom < -5:
+            return "🟢", "Good"
+        if mom > 5:
+            return "🔴", "Alert"
+        return "🟡", "Alert"
+
+    metrics = [
+        ("총 매출", summary_raw["total_sales"], summary_raw["total_sales_mom"], "원", False),
+        ("합격 수", summary_raw["hire_cnt"], summary_raw["hire_mom"], "건", False),
+        ("서류통과 수", summary_raw["pass_cnt"], summary_raw["pass_mom"], "건", False),
+        ("매치업 수", summary_raw["matchup_cnt"], summary_raw["matchup_mom"], "건", False),
+        ("신규기업 가입", summary_raw["new_com_accept"], summary_raw["new_com_mom"], "건", False),
+    ]
+    if "lead_time" in summary_raw and not np.isnan(summary_raw.get("lead_time", float("nan"))):
+        metrics.append(("채용 리드타임", summary_raw["lead_time"], summary_raw.get("lead_time_mom", float("nan")), "일", True))
+
+    indicators = []
+    for name, val, mom, unit, inverted in metrics:
+        if unit == "원":
+            result_str = f"₩{val / 1e8:.1f}억"
+        elif unit == "일":
+            result_str = f"{val:.1f}일"
+        else:
+            result_str = f"{val:,.0f}건"
+
+        mom_val = mom if not np.isnan(mom) else 0
+        if inverted:
+            emoji, grade = _grade_inverted(mom_val)
+        else:
+            emoji, grade = _grade(mom_val)
+
+        mom_str = f"{mom:+.1f}%" if not np.isnan(mom) else "N/A"
+        status = "📈" if mom_val > 0 else ("📉" if mom_val < 0 else "➡️")
+        if inverted:
+            status = "📉" if mom_val > 0 else ("📈" if mom_val < 0 else "➡️")
+
+        indicators.append({
+            "emoji": emoji,
+            "metric": name,
+            "result": result_str,
+            "evaluation": f"{mom_str} {status}",
+        })
+
+    return indicators
+
+
 @router.post("/analyze")
 async def analyze(
     file: UploadFile = File(...),
@@ -101,7 +168,12 @@ async def analyze(
         markdown = generate_report_fallback(structured_data)
 
     title = _extract_title(markdown)
-    indicators, one_liner = _extract_executive_summary(markdown)
+
+    # 구조화된 데이터에서 직접 지표 생성 (Gemini 파싱보다 정확)
+    indicators = _build_indicators_from_data(structured_data["summary_raw"])
+
+    # 한 줄 요약은 Gemini 마크다운에서 추출
+    _, one_liner = _extract_executive_summary(markdown)
 
     return {
         "report": {
