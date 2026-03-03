@@ -58,7 +58,7 @@ def extract_structured_data(file_bytes: bytes, target_month: str | None = None, 
     month_label = f"{tm.year}년 {tm.month}월"
 
     # 1. Executive Summary
-    summary = generate_summary(monthly, tm)
+    summary = generate_summary(monthly, tm, hire_raw=hire_raw)
     summary_text = _format_summary(summary)
 
     # 2. 월별 KPI 추이 (최근 4개월)
@@ -120,10 +120,17 @@ def _format_summary(s: dict) -> str:
         ("매치업 수", s["matchup_cnt"], s["matchup_mom"], "건"),
         ("신규기업 가입", s["new_com_accept"], s["new_com_mom"], "건"),
     ]
+
+    # 리드타임이 있으면 추가
+    if "lead_time" in s and not pd.isna(s.get("lead_time")):
+        metrics.append(("채용 리드타임", s["lead_time"], s.get("lead_time_mom"), "일"))
+
     for name, val, mom, unit in metrics:
         emoji = get_status_emoji(mom) if not pd.isna(mom) else "➡️"
         if unit == "원":
             val_str = f"₩{val/1e8:.1f}억"
+        elif unit == "일":
+            val_str = f"{val:.1f}일"
         else:
             val_str = f"{val:.0f}{unit}"
         mom_str = f"{mom:+.1f}%" if not pd.isna(mom) else "N/A"

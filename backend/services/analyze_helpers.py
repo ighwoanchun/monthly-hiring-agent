@@ -114,17 +114,17 @@ def text_bar_chart(value: float, max_value: float, length: int = 25) -> str:
     return "█" * filled + "░" * (length - filled)
 
 
-def generate_summary(monthly: pd.DataFrame, target_month) -> dict:
+def generate_summary(monthly: pd.DataFrame, target_month, hire_raw: pd.DataFrame = None) -> dict:
     """Executive Summary용 핵심 지표"""
     current = monthly[monthly['report_month'] == target_month].iloc[0]
     prev_idx = monthly[monthly['report_month'] == target_month].index[0] - 1
-    
+
     if prev_idx >= 0:
         previous = monthly.iloc[prev_idx]
     else:
         previous = current  # 이전 데이터 없으면 동일값
-    
-    return {
+
+    result = {
         'total_sales': current['total_sales'],
         'total_sales_mom': calc_mom(current['total_sales'], previous['total_sales']),
         'hire_cnt': current['hire_cnt'],
@@ -136,6 +136,20 @@ def generate_summary(monthly: pd.DataFrame, target_month) -> dict:
         'new_com_accept': current['new_com_accept'],
         'new_com_mom': calc_mom(current['new_com_accept'], previous['new_com_accept']),
     }
+
+    # 리드타임 가중평균 (hire_raw가 제공된 경우)
+    if hire_raw is not None:
+        data = hire_raw[hire_raw['hire_month'] == target_month]
+        prev_month = target_month - pd.DateOffset(months=1)
+        prev_data = hire_raw[hire_raw['hire_month'] == prev_month]
+
+        cur_lt = weighted_avg(data, 'total_lead_time', 'hire_count')
+        prev_lt = weighted_avg(prev_data, 'total_lead_time', 'hire_count') if not prev_data.empty else np.nan
+
+        result['lead_time'] = cur_lt
+        result['lead_time_mom'] = calc_mom(cur_lt, prev_lt) if not np.isnan(cur_lt) and not np.isnan(prev_lt) else np.nan
+
+    return result
 
 
 # 전환율 참조값
