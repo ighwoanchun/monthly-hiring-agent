@@ -41,7 +41,11 @@ def _load_system_prompt() -> str:
 
 
 def _build_user_prompt(structured_data: dict) -> str:
+    from datetime import date
+
     target_month = structured_data["target_month"]
+    today = date.today()
+    today_label = f"{today.year}년 {today.month}월 {today.day}일"
     # 월 숫자 추출 (예: "2026년 1월" → "1", 익월 "2")
     parts = target_month.replace("년 ", "-").replace("월", "").split("-")
     year = int(parts[0])
@@ -84,7 +88,7 @@ def _build_user_prompt(structured_data: dict) -> str:
 # {target_month} 실적 분석 & {next_month}월 전망 리포트
 
 > **분석 기간**: (최근 4개월 범위)
-> **생성 일시**: (오늘 날짜)
+> **생성 일시**: {today_label}
 > **데이터 소스**: 월통합분석, 지원기준리드타임_raw, 합격기준리드타임_raw
 
 **데이터 구분 가이드**
