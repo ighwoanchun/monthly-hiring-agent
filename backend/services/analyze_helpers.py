@@ -49,8 +49,9 @@ def get_status_emoji(mom: float) -> str:
 
 def analyze_by_job(hire_raw: pd.DataFrame, target_month) -> pd.DataFrame:
     """직군별 합격 분석 (합격기준)"""
-    data = hire_raw[hire_raw['hire_month'] == target_month]
-    
+    data = hire_raw[hire_raw['hire_month'] == target_month].copy()
+    data['job_category'] = data['job_category'].fillna('미분류')
+
     result = data.groupby('job_category').apply(
         lambda g: pd.Series({
             'hire_count': g['hire_count'].sum(),
@@ -66,11 +67,12 @@ def analyze_by_job(hire_raw: pd.DataFrame, target_month) -> pd.DataFrame:
 
 def analyze_by_size(hire_raw: pd.DataFrame, target_month) -> pd.DataFrame:
     """기업규모별 합격 분석 (합격기준)"""
-    size_order = ['1~4', '5~10', '11~50', '51~200', '201~500', 
+    size_order = ['1~4', '5~10', '11~50', '51~200', '201~500',
                   '501~1000', '1001~5000', '5001~10000', '10001~']
-    
-    data = hire_raw[hire_raw['hire_month'] == target_month]
-    
+
+    data = hire_raw[hire_raw['hire_month'] == target_month].copy()
+    data['company_size'] = data['company_size'].fillna('미분류')
+
     result = data.groupby('company_size').apply(
         lambda g: pd.Series({
             'hire_count': g['hire_count'].sum(),
