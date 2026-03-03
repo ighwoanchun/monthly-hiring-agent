@@ -180,7 +180,7 @@ def _format_revenue(monthly: pd.DataFrame, target_month) -> str:
 
 def _format_job_analysis(df: pd.DataFrame) -> str:
     lines = ["[직군별 합격 분석]"]
-    lines.append("| 직군 | 합격 수 | 비율 | 평균 리드타임 |")
+    lines.append("| 직군 | 합격 수 | 비율 | 평균 리드타임(지원→합격) |")
     lines.append("|---|---|---|---|")
 
     top10 = df.head(10)
@@ -199,7 +199,7 @@ def _format_job_analysis(df: pd.DataFrame) -> str:
 
 def _format_size_analysis(df: pd.DataFrame) -> str:
     lines = ["[기업규모별 합격 분석]"]
-    lines.append("| 기업규모 | 합격 수 | 비율 | 평균 리드타임 |")
+    lines.append("| 기업규모 | 합격 수 | 비율 | 평균 리드타임(지원→합격) |")
     lines.append("|---|---|---|---|")
 
     for _, r in df.iterrows():
