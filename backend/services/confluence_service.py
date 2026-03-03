@@ -97,12 +97,63 @@ def convert_markdown_to_confluence(md_text: str) -> str:
     return html
 
 
-def find_page(title: str) -> dict | None:
+def _verify_auth() -> None:
+    """API 토큰 인증이 유효한지 확인합니다."""
+    url = f"{settings.confluence_url}/wiki/rest/api/user/current"
+    req = urllib.request.Request(url, headers=_headers())
+    try:
+        with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+            data = json.loads(resp.read().decode())
+            if data.get("type") == "anonymous":
+                raise RuntimeError(
+                    "Confluence 인증 실패: Anonymous로 인식됨. "
+                    "CONFLUENCE_EMAIL과 CONFLUENCE_TOKEN을 확인하세요. "
+                    "토큰은 https://id.atlassian.com/manage-profile/security/api-tokens 에서 생성합니다."
+                )
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Confluence 인증 확인 실패: {e.code} {e.reason}") from e
+
+
+def _resolve_space_key() -> str:
+    """설정된 space key/id를 실제 사용 가능한 space key로 변환합니다."""
+    key = settings.confluence_space_key
+    if not key:
+        raise RuntimeError("CONFLUENCE_SPACE_KEY가 설정되지 않았습니다.")
+
+    # v1 API로 직접 확인
+    url = f"{settings.confluence_url}/wiki/rest/api/space/{urllib.parse.quote(key)}"
+    req = urllib.request.Request(url, headers=_headers())
+    try:
+        with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+            data = json.loads(resp.read().decode())
+            return data["key"]
+    except urllib.error.HTTPError:
+        pass
+
+    # v2 API로 ID 기반 조회 시도 (숫자인 경우)
+    if key.isdigit():
+        url = f"{settings.confluence_url}/wiki/api/v2/spaces/{key}"
+        req = urllib.request.Request(url, headers=_headers())
+        try:
+            with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+                data = json.loads(resp.read().decode())
+                return data["key"]
+        except urllib.error.HTTPError:
+            pass
+
+    raise RuntimeError(
+        f"Space '{key}'를 찾을 수 없습니다. "
+        "Confluence에서 해당 Space의 Settings → Space details에서 "
+        "정확한 Space Key를 확인하세요."
+    )
+
+
+def find_page(title: str, space_key: str) -> dict | None:
     """제목으로 기존 페이지를 검색합니다."""
     encoded = urllib.parse.quote(title)
     url = (
         f"{settings.confluence_url}/wiki/rest/api/content"
-        f"?title={encoded}&spaceKey={settings.confluence_space_key}&expand=version"
+        f"?title={encoded}&spaceKey={space_key}&expand=version"
     )
     req = urllib.request.Request(url, headers=_headers())
     try:
@@ -120,10 +171,13 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
     Returns:
         (page_id, page_url)
     """
+    _verify_auth()
+    space_key = _resolve_space_key()
+
     headers = _headers()
     ctx = _ssl_ctx()
 
-    existing = find_page(title)
+    existing = find_page(title, space_key)
 
     if existing:
         page_id = existing["id"]
@@ -132,7 +186,7 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
         payload = {
             "type": "page",
             "title": title,
-            "space": {"key": settings.confluence_space_key},
+            "space": {"key": space_key},
             "body": {"storage": {"value": body_html, "representation": "storage"}},
             "version": {"number": version + 1},
         }
@@ -142,7 +196,7 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
         payload = {
             "type": "page",
             "title": title,
-            "space": {"key": settings.confluence_space_key},
+            "space": {"key": space_key},
             "body": {"storage": {"value": body_html, "representation": "storage"}},
         }
         if settings.confluence_parent_id:
@@ -152,8 +206,14 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
-    with urllib.request.urlopen(req, context=ctx) as resp:
-        result = json.loads(resp.read().decode())
-        page_id = result["id"]
-        page_url = f"{settings.confluence_url}/wiki{result.get('_links', {}).get('webui', '')}"
-        return page_id, page_url
+    try:
+        with urllib.request.urlopen(req, context=ctx) as resp:
+            result = json.loads(resp.read().decode())
+            page_id = result["id"]
+            page_url = f"{settings.confluence_url}/wiki{result.get('_links', {}).get('webui', '')}"
+            return page_id, page_url
+    except urllib.error.HTTPError as e:
+        body = e.read().decode() if hasattr(e, "read") else ""
+        raise RuntimeError(
+            f"Confluence 페이지 생성/수정 실패: {e.code} {e.reason}. {body[:200]}"
+        ) from e
