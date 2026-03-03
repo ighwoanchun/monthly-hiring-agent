@@ -16,10 +16,19 @@ class ConfluenceUploadResponse(BaseModel):
     page_url: str
 
 
+class IndicatorItem(BaseModel):
+    emoji: str
+    metric: str
+    result: str
+    evaluation: str
+
+
 class SlackNotifyRequest(BaseModel):
     markdown: str
     confluence_url: str = ""
     title: str
+    indicators: list[IndicatorItem] = []
+    one_liner: str = ""
 
 
 class SlackNotifyResponse(BaseModel):

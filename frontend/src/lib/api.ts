@@ -74,7 +74,9 @@ export async function uploadToConfluence(
 export async function notifySlack(
   markdown: string,
   title: string,
-  confluenceUrl?: string
+  confluenceUrl?: string,
+  indicators?: AnalysisResult["summary"]["indicators"],
+  oneLiner?: string
 ): Promise<SlackResult> {
   const res = await fetch(`${API_BASE}/api/slack/notify`, {
     method: "POST",
@@ -83,6 +85,8 @@ export async function notifySlack(
       markdown,
       title,
       confluence_url: confluenceUrl || "",
+      indicators: indicators || [],
+      one_liner: oneLiner || "",
     }),
   });
 

@@ -62,7 +62,9 @@ export function useAnalysis() {
       await notifySlack(
         result.report.markdown,
         result.report.title,
-        confluenceUrl || undefined
+        confluenceUrl || undefined,
+        result.summary.indicators,
+        result.summary.one_liner
       );
       setSlackSent(true);
     } catch (e) {
