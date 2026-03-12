@@ -65,6 +65,65 @@ def _extract_executive_summary(md_text: str) -> tuple[list[dict], str]:
     return indicators, one_liner
 
 
+def _extract_top5_insights(md_text: str) -> list[dict]:
+    """마크다운에서 Top 5 핵심 인사이트를 추출합니다.
+
+    형식:
+    - **🔴 제목**: 현상 설명
+      - 원인: ...
+      - 액션: ...
+    """
+    insights = []
+
+    # "Top 5 핵심 인사이트" ~ 다음 ### 섹션까지 추출
+    section_match = re.search(
+        r"Top\s*5\s*핵심\s*인사이트[^\n]*\n(.*?)(?=\n###\s|\n## |\Z)",
+        md_text,
+        re.DOTALL,
+    )
+    if not section_match:
+        return insights
+
+    section = section_match.group(1)
+
+    # 각 인사이트 항목 파싱
+    # 패턴: - **emoji title**: description
+    item_pattern = re.compile(
+        r"[-*]\s*\*\*([🔴🟢🟡])\s*(.+?)\*\*:\s*(.+?)$",
+        re.MULTILINE,
+    )
+
+    items = list(item_pattern.finditer(section))
+    for i, m in enumerate(items):
+        emoji = m.group(1)
+        title = m.group(2).strip()
+        description = m.group(3).strip()
+
+        # 해당 항목 이후 ~ 다음 항목 이전까지의 텍스트에서 원인/액션 추출
+        start = m.end()
+        end = items[i + 1].start() if i + 1 < len(items) else len(section)
+        sub = section[start:end]
+
+        cause = ""
+        action = ""
+        cause_match = re.search(r"원인:\s*(.+?)$", sub, re.MULTILINE)
+        action_match = re.search(r"액션:\s*(.+?)$", sub, re.MULTILINE)
+        if cause_match:
+            cause = cause_match.group(1).strip()
+        if action_match:
+            action = action_match.group(1).strip()
+
+        insights.append({
+            "emoji": emoji,
+            "title": title,
+            "description": description,
+            "cause": cause,
+            "action": action,
+        })
+
+    return insights[:5]
+
+
 def _extract_title(md_text: str) -> str:
     """마크다운에서 제목(H1)을 추출합니다."""
     match = re.search(r"^#\s+(.+)$", md_text, re.MULTILINE)
@@ -172,8 +231,9 @@ async def analyze(
     # 구조화된 데이터에서 직접 지표 생성 (Gemini 파싱보다 정확)
     indicators = _build_indicators_from_data(structured_data["summary_raw"])
 
-    # 한 줄 요약은 Gemini 마크다운에서 추출
+    # 한 줄 요약과 인사이트는 Gemini 마크다운에서 추출
     _, one_liner = _extract_executive_summary(markdown)
+    insights = _extract_top5_insights(markdown)
 
     return {
         "report": {
@@ -184,5 +244,6 @@ async def analyze(
         "summary": {
             "indicators": indicators,
             "one_liner": one_liner,
+            "insights": insights,
         },
     }

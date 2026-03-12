@@ -14,6 +14,13 @@ export interface AnalysisResult {
       evaluation: string;
     }>;
     one_liner: string;
+    insights?: Array<{
+      emoji: string;
+      title: string;
+      description: string;
+      cause: string;
+      action: string;
+    }>;
   };
 }
 
