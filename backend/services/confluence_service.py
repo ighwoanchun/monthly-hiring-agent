@@ -5,7 +5,6 @@ run_pipeline.py와 upload_confluence.py의 로직을 재사용합니다.
 
 import re
 import json
-import ssl
 import base64
 import urllib.request
 import urllib.parse
@@ -14,13 +13,6 @@ import urllib.error
 import markdown as md_lib
 
 from config import settings
-
-
-def _ssl_ctx():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
 
 
 def _headers():
@@ -191,7 +183,7 @@ def _verify_auth() -> None:
     url = f"{settings.confluence_url}/wiki/rest/api/user/current"
     req = urllib.request.Request(url, headers=_headers())
     try:
-        with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+        with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             if data.get("type") == "anonymous":
                 raise RuntimeError(
@@ -213,7 +205,7 @@ def _resolve_space_key() -> str:
     url = f"{settings.confluence_url}/wiki/rest/api/space/{urllib.parse.quote(key)}"
     req = urllib.request.Request(url, headers=_headers())
     try:
-        with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+        with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             return data["key"]
     except urllib.error.HTTPError:
@@ -224,7 +216,7 @@ def _resolve_space_key() -> str:
         url = f"{settings.confluence_url}/wiki/api/v2/spaces/{key}"
         req = urllib.request.Request(url, headers=_headers())
         try:
-            with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+            with urllib.request.urlopen(req) as resp:
                 data = json.loads(resp.read().decode())
                 return data["key"]
         except urllib.error.HTTPError:
@@ -246,7 +238,7 @@ def find_page(title: str, space_key: str) -> dict | None:
     )
     req = urllib.request.Request(url, headers=_headers())
     try:
-        with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+        with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
             results = data.get("results", [])
             return results[0] if results else None
@@ -264,7 +256,6 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
     space_key = _resolve_space_key()
 
     headers = _headers()
-    ctx = _ssl_ctx()
 
     existing = find_page(title, space_key)
 
@@ -296,7 +287,7 @@ def upload(title: str, body_html: str) -> tuple[str, str]:
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
     try:
-        with urllib.request.urlopen(req, context=ctx) as resp:
+        with urllib.request.urlopen(req) as resp:
             result = json.loads(resp.read().decode())
             page_id = result["id"]
             page_url = f"{settings.confluence_url}/wiki{result.get('_links', {}).get('webui', '')}"

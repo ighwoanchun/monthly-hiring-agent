@@ -5,18 +5,10 @@ run_pipeline.py의 send_slack_message(), extract_executive_summary() 로직을 �
 
 import re
 import json
-import ssl
 import urllib.request
 import urllib.error
 
 from config import settings
-
-
-def _ssl_ctx():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
 
 
 def extract_executive_summary(md_text: str) -> tuple[list[dict], str]:
@@ -131,7 +123,7 @@ def send_message(
         method="POST",
     )
 
-    with urllib.request.urlopen(req, context=_ssl_ctx()) as resp:
+    with urllib.request.urlopen(req) as resp:
         result = json.loads(resp.read().decode())
         if not result.get("ok"):
             raise RuntimeError(f"Slack 전송 실패: {result.get('error', 'unknown')}")
