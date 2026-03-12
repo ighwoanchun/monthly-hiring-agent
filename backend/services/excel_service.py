@@ -170,11 +170,30 @@ def _format_revenue(monthly: pd.DataFrame, target_month) -> str:
     row = monthly[monthly["report_month"] == target_month].iloc[0]
     total = row["total_sales"]
 
+    # 전월 데이터
+    idx = monthly[monthly["report_month"] == target_month].index[0]
+    prev_row = monthly.iloc[idx - 1] if idx > 0 else None
+
+    items = [("recruit_fee", "수수료 매출"), ("flat_rate_fee", "정액제 매출"), ("ad_sales", "광고 매출")]
+
+    # refund_recruit_fee 컬럼이 있으면 추가
+    if "refund_recruit_fee" in row.index:
+        items.append(("refund_recruit_fee", "환불 매출"))
+
     parts = []
-    for col, label in [("recruit_fee", "수수료 매출"), ("flat_rate_fee", "정액제 매출"), ("ad_sales", "광고 매출")]:
+    for col, label in items:
         val = row.get(col, 0) or 0
         pct = val / total * 100 if total else 0
-        parts.append(f"- {label}: ₩{val/1e8:.1f}억 ({pct:.1f}%)")
+        mom_str = ""
+        if prev_row is not None:
+            prev_val = prev_row.get(col, 0) or 0
+            if prev_val != 0:
+                mom = calc_mom(abs(val), abs(prev_val))
+                # 환불은 절대값 증가가 부정적
+                if col == "refund_recruit_fee":
+                    mom = calc_mom(abs(val), abs(prev_val))
+                mom_str = f", MoM {mom:+.1f}%"
+        parts.append(f"- {label}: ₩{val/1e8:.1f}억 ({pct:.1f}%{mom_str})")
 
     return "[매출 구조]\n" + "\n".join(parts)
 
