@@ -9,7 +9,7 @@ interface AnalysisProgressProps {
 
 const steps = [
   { key: "uploading", label: "파일 업로드" },
-  { key: "analyzing", label: "Claude AI 분석 중" },
+  { key: "analyzing", label: "AI 분석 중" },
   { key: "done", label: "리포트 생성 완료" },
 ] as const;
 
@@ -107,7 +107,7 @@ export default function AnalysisProgress({
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
             />
           </svg>
-          Claude AI가 데이터를 분석하고 리포트를 생성하고 있습니다...
+          AI가 데이터를 분석하고 리포트를 생성하고 있습니다...
         </div>
       )}
 
