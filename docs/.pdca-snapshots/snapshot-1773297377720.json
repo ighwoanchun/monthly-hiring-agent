@@ -1,0 +1,677 @@
+{
+  "timestamp": "2026-03-12T06:36:17.718Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-03-12T06:35:39.960Z",
+    "activeFeatures": [
+      "backend",
+      "__init__.py",
+      "excel_service.py",
+      "claude_service.py",
+      "confluence_service.py",
+      "slack_service.py",
+      "frontend",
+      "analyze_helpers.py"
+    ],
+    "primaryFeature": "backend",
+    "features": {
+      "backend": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:01:01.484Z",
+          "lastUpdated": "2026-03-12T06:11:19.867Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/routers/analysis.py"
+      },
+      "__init__.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:01:05.857Z",
+          "lastUpdated": "2026-02-23T01:01:05.857Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/__init__.py"
+      },
+      "excel_service.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:01:58.402Z",
+          "lastUpdated": "2026-03-12T06:35:39.959Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/excel_service.py"
+      },
+      "claude_service.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:02:19.213Z",
+          "lastUpdated": "2026-03-12T06:23:31.183Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/claude_service.py"
+      },
+      "confluence_service.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:03:07.903Z",
+          "lastUpdated": "2026-03-03T00:40:49.032Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/confluence_service.py"
+      },
+      "slack_service.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:03:21.108Z",
+          "lastUpdated": "2026-02-23T01:03:21.108Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/slack_service.py"
+      },
+      "frontend": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-02-23T01:06:12.720Z",
+          "lastUpdated": "2026-03-12T06:28:30.423Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/components/AnalysisProgress.tsx"
+      },
+      "analyze_helpers.py": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-03T00:07:42.047Z",
+          "lastUpdated": "2026-03-03T01:05:40.063Z"
+        },
+        "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/backend/services/analyze_helpers.py"
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-02-11T04:37:00.255Z",
+      "onboardingCompleted": false,
+      "lastActivity": "2026-03-12T06:35:39.960Z"
+    },
+    "history": [
+      {
+        "timestamp": "2026-02-23T01:01:01.484Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:02.071Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:04.919Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:05.260Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:05.857Z",
+        "feature": "__init__.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:08.368Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:01:58.402Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:02:19.213Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:02:40.761Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:03:07.903Z",
+        "feature": "confluence_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:03:21.108Z",
+        "feature": "slack_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:03:26.352Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:03:28.748Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:06:12.720Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:09:23.589Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:09:31.106Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:09:46.394Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:09:58.069Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:10:00.978Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:10:18.875Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:10:47.960Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:21:18.109Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:21:25.861Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:21:30.040Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:26:20.820Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:26:35.677Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:43:39.685Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T01:48:42.438Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T02:04:17.353Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T04:29:54.765Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T04:30:04.330Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T04:30:20.117Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T04:30:31.950Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T04:30:44.172Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:46.129Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:47.797Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:49.137Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:52.671Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:56.438Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:44:59.653Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:05.712Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:08.035Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:09.327Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:10.759Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:16.481Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T05:45:19.190Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:55:56.064Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:56:16.337Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:56:25.847Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:56:42.520Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:56:53.247Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:56:58.985Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T08:57:06.518Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:10:06.578Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:10:15.227Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:10:26.126Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:10:32.690Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:22:19.051Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:22:40.965Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-02-23T09:28:37.958Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T00:07:42.047Z",
+        "feature": "analyze_helpers.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T00:16:24.751Z",
+        "feature": "analyze_helpers.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T00:40:49.032Z",
+        "feature": "confluence_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:05:40.063Z",
+        "feature": "analyze_helpers.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:05:52.796Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:07:16.914Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:13:33.630Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:14:05.426Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:14:29.074Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:15:03.708Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:23:09.153Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:24:53.336Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:26:44.772Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:26:55.703Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:50:31.698Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:50:38.636Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T01:54:30.586Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T02:39:35.098Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T04:05:55.628Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-03T04:06:32.025Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:05:45.130Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:06:29.305Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:11:19.867Z",
+        "feature": "backend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:11:39.230Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:12:08.097Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:20:07.280Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:20:36.687Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:23:31.183Z",
+        "feature": "claude_service.py",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:28:30.424Z",
+        "feature": "frontend",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T06:35:39.959Z",
+        "feature": "excel_service.py",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}
