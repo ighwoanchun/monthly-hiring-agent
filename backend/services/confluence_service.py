@@ -34,6 +34,69 @@ def _headers():
     }
 
 
+def _convert_insights_to_cards(html: str) -> str:
+    """Top 5 핵심 인사이트 섹션을 카드 스타일 HTML로 변환합니다.
+
+    markdown 라이브러리가 2칸 들여쓰기 중첩을 flat <li>로 렌더링하므로,
+    <strong>+이모지로 시작하는 항목을 제목으로, 원인:/액션: 항목을 하위로 그룹핑합니다.
+    """
+    pattern = re.compile(
+        r"(<(?:h[23]|p)>.*?Top\s*5\s*핵심\s*인사이트.*?</(?:h[23]|p)>)\s*<ul>(.*?)</ul>",
+        re.DOTALL,
+    )
+    match = pattern.search(html)
+    if not match:
+        return html
+
+    heading = match.group(1)
+    list_html = match.group(2)
+
+    # 모든 <li> 항목 추출
+    li_items = re.findall(r"<li>(.*?)</li>", list_html, re.DOTALL)
+
+    # 제목 항목(이모지+strong) 기준으로 그룹핑
+    groups: list[dict] = []
+    for li in li_items:
+        text = li.strip()
+        if re.search(r"<strong>[🔴🟢🟡]", text):
+            groups.append({"title": text, "cause": "", "action": ""})
+        elif groups:
+            if text.startswith("원인:"):
+                groups[-1]["cause"] = text[len("원인:"):].strip()
+            elif text.startswith("액션:"):
+                groups[-1]["action"] = text[len("액션:"):].strip()
+
+    cards = []
+    for g in groups:
+        if "🔴" in g["title"]:
+            border_color = "#EF4444"
+        elif "🟢" in g["title"]:
+            border_color = "#22C55E"
+        else:
+            border_color = "#EAB308"
+
+        card = (
+            f'<div style="background-color: #f9fafb; border-left: 4px solid {border_color}; '
+            f'border-radius: 4px; padding: 12px 16px; margin: 8px 0;">'
+            f'<div style="font-size: 14px;">{g["title"]}</div>'
+        )
+        if g["cause"]:
+            card += (
+                f'<div style="margin-top: 6px; font-size: 13px; color: #6b7280; padding-left: 8px;">'
+                f'<strong style="color: #4b5563;">원인:</strong> {g["cause"]}</div>'
+            )
+        if g["action"]:
+            card += (
+                f'<div style="margin-top: 3px; font-size: 13px; color: #2563eb; padding-left: 8px;">'
+                f'<strong>액션:</strong> {g["action"]}</div>'
+            )
+        card += "</div>"
+        cards.append(card)
+
+    replacement = heading + "\n" + "\n".join(cards)
+    return html[: match.start()] + replacement + html[match.end() :]
+
+
 def convert_markdown_to_confluence(md_text: str) -> str:
     """마크다운을 Confluence storage format HTML로 변환합니다."""
     html = md_lib.markdown(md_text, extensions=["tables", "fenced_code"])
@@ -93,6 +156,9 @@ def convert_markdown_to_confluence(md_text: str) -> str:
         html,
     )
     html = html.replace("<hr>", "<hr />")
+
+    # Top 5 핵심 인사이트를 카드 스타일로 변환
+    html = _convert_insights_to_cards(html)
 
     return html
 
