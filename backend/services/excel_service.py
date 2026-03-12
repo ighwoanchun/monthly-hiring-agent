@@ -176,10 +176,6 @@ def _format_revenue(monthly: pd.DataFrame, target_month) -> str:
 
     items = [("recruit_fee", "수수료 매출"), ("flat_rate_fee", "정액제 매출"), ("ad_sales", "광고 매출")]
 
-    # refund_recruit_fee 컬럼이 있으면 추가
-    if "refund_recruit_fee" in row.index:
-        items.append(("refund_recruit_fee", "환불 매출"))
-
     parts = []
     for col, label in items:
         val = row.get(col, 0) or 0
@@ -188,12 +184,24 @@ def _format_revenue(monthly: pd.DataFrame, target_month) -> str:
         if prev_row is not None:
             prev_val = prev_row.get(col, 0) or 0
             if prev_val != 0:
-                mom = calc_mom(abs(val), abs(prev_val))
-                # 환불은 절대값 증가가 부정적
-                if col == "refund_recruit_fee":
-                    mom = calc_mom(abs(val), abs(prev_val))
+                mom = calc_mom(val, prev_val)
                 mom_str = f", MoM {mom:+.1f}%"
         parts.append(f"- {label}: ₩{val/1e8:.1f}억 ({pct:.1f}%{mom_str})")
+
+    # 환불매출은 별도 처리 (절대값으로 표시, 증감 방향 명확화)
+    if "refund_recruit_fee" in row.index:
+        refund = row.get("refund_recruit_fee", 0) or 0
+        refund_abs = abs(refund)
+        recruit_fee = row.get("recruit_fee", 0) or 0
+        net_recruit = recruit_fee + refund  # refund는 음수이므로 +
+        parts.append(f"- 환불 차감: ₩{refund_abs/1e8:.1f}억 (수수료 매출의 {refund_abs/recruit_fee*100:.1f}%)" if recruit_fee else f"- 환불 차감: ₩{refund_abs/1e8:.1f}억")
+        if prev_row is not None:
+            prev_refund = abs(prev_row.get("refund_recruit_fee", 0) or 0)
+            if prev_refund > 0:
+                refund_change = calc_mom(refund_abs, prev_refund)
+                direction = "증가 → 순매출 악화" if refund_change > 0 else "감소 → 순매출 개선"
+                parts[-1] += f" (전월 ₩{prev_refund/1e8:.1f}억 → 당월 ₩{refund_abs/1e8:.1f}억, {refund_change:+.1f}% {direction})"
+        parts.append(f"- 수수료 순매출: ₩{net_recruit/1e8:.1f}억 (수수료 - 환불)")
 
     return "[매출 구조]\n" + "\n".join(parts)
 
