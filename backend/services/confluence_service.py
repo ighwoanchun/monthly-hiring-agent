@@ -80,21 +80,41 @@ def _convert_insights_to_cards(html: str) -> str:
             f'border-radius: 4px; padding: 12px 16px; margin: 8px 0;">'
             f'<div style="font-size: 14px;">{g["title"]}</div>'
         )
+        sub_items = []
         if g["cause"]:
-            card += (
-                f'<div style="margin-top: 6px; font-size: 13px; color: #6b7280; padding-left: 8px;">'
-                f'<strong style="color: #4b5563;">원인:</strong> {g["cause"]}</div>'
+            sub_items.append(
+                f'<li style="color: #4b5563; margin-bottom: 2px;">'
+                f'<strong>원인:</strong> {g["cause"]}</li>'
             )
         if g["action"]:
+            sub_items.append(
+                f'<li style="color: #2563eb; margin-bottom: 2px;">'
+                f'<strong>액션:</strong> {g["action"]}</li>'
+            )
+        if sub_items:
             card += (
-                f'<div style="margin-top: 3px; font-size: 13px; color: #2563eb; padding-left: 8px;">'
-                f'<strong>액션:</strong> {g["action"]}</div>'
+                f'<ul style="margin: 6px 0 0 0; padding-left: 20px; font-size: 13px;">'
+                + "".join(sub_items)
+                + "</ul>"
             )
         card += "</div>"
         cards.append(card)
 
     replacement = heading + "\n" + "\n".join(cards)
     return html[: match.start()] + replacement + html[match.end() :]
+
+
+def _normalize_emojis(html: str) -> str:
+    """Confluence에서 렌더링되지 않는 이모지 변형을 표준 이모지로 정규화합니다.
+
+    Gemini가 variation selector(VS16, U+FE0F) 등을 포함한 이모지를 출력하면
+    Confluence에서 '??'로 표시되는 문제를 방지합니다.
+    """
+    # variation selector 제거 (U+FE0F, U+FE0E)
+    html = html.replace("\ufe0f", "").replace("\ufe0e", "")
+    # zero-width joiner 제거 (보이지 않는 결합 문자)
+    html = html.replace("\u200d", "")
+    return html
 
 
 def convert_markdown_to_confluence(md_text: str) -> str:
@@ -159,6 +179,9 @@ def convert_markdown_to_confluence(md_text: str) -> str:
 
     # Top 5 핵심 인사이트를 카드 스타일로 변환
     html = _convert_insights_to_cards(html)
+
+    # Confluence에서 렌더링 안 되는 이모지 변형 정규화
+    html = _normalize_emojis(html)
 
     return html
 
