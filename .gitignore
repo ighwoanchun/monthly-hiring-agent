@@ -7,3 +7,4 @@ node_modules/
 .playwright-mcp/
 screenshot-*.png
 data/
+.vercel
