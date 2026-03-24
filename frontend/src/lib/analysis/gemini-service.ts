@@ -1,0 +1,347 @@
+/**
+ * Gemini API를 호출하여 분석 리포트를 생성하는 서비스 — Python claude_service.py 포팅
+ */
+
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { StructuredData } from "./excel-service";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+function loadSystemPrompt(): string {
+  let claudeMd = "";
+  // backend/CLAUDE.md에 상세 규칙(데이터 구조, 용어, 리포트 구조, 분석 규칙)이 있음
+  const candidates = [
+    join(process.cwd(), "..", "backend", "CLAUDE.md"),
+    join(process.cwd(), "..", "CLAUDE.md"),
+    join(process.cwd(), "CLAUDE.md"),
+  ];
+  for (const p of candidates) {
+    try {
+      claudeMd = readFileSync(p, "utf-8");
+      break;
+    } catch {
+      // 다음 경로 시도
+    }
+  }
+
+  return `당신은 채용 플랫폼의 월간 데이터를 분석하는 전문가입니다.
+아래 규칙과 리포트 템플릿에 **정확히** 따라 마크다운 리포트를 작성하세요.
+
+## 핵심 규칙
+- pass_cnt = '서류통과 수' (합격 아님!). hire_cnt = '합격 수' (최종 합격자)
+- 직군별/기업규모별 합계는 반드시 hire_cnt와 일치
+- MoM = (당월-전월)/전월×100
+- 상태 이모지: >+5% → 📈, <-5% → 📉, 그 외 → ➡️
+- TOP 10 외 → "기타*" (각주에 세부 목록), null → "미분류"
+- 리드타임 가중평균 = Σ(리드타임×합격수)/Σ합격수
+- 볼드 텍스트(**제목:**) 뒤에 리스트나 테이블이 올 때 반드시 빈 줄 추가
+- 숫자에 천 단위 콤마 사용 (예: 90,424)
+- 합격 수 단위는 "명", 지원 수 단위도 숫자+명
+
+## Executive Summary 테이블 형식 (필수)
+| 구분 | 지표 | 결과 | 평가 |
+에서 구분은 🟢 Best / 🟢 Good / 🔴 Alert 중 하나.
+
+## 인사이트 작성 규칙
+- 각 섹션마다 💡 인사이트 블록 포함
+- "수익 기여도:", "리드타임 패턴:", "핵심 고객군:" 등 소제목 + 볼드 키 수치
+- 구체적 수치와 → 화살표로 의미 연결 (예: "개발 직군이 전체 합격의 **41%** — 핵심 수익 동력")
+
+---
+
+${claudeMd}`;
+}
+
+function buildUserPrompt(data: StructuredData): string {
+  const today = new Date();
+  const todayLabel = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+
+  const parts = data.target_month.replace("년 ", "-").replace("월", "").split("-");
+  const _year = parseInt(parts[0]);
+  const month = parseInt(parts[1]);
+  const nextMonth = month < 12 ? month + 1 : 1;
+  const prevMonthLabel = `${month > 1 ? month - 1 : 12}월`;
+
+  return `다음은 ${data.target_month} 채용 데이터 분석 결과입니다.
+아래 리포트 템플릿의 모든 섹션을 빠짐없이 작성하세요. 마크다운만 출력하세요.
+
+=== 데이터 ===
+
+${data.summary}
+
+${data.monthly_kpi}
+
+${data.revenue_breakdown}
+
+${data.job_analysis}
+
+${data.size_analysis}
+
+${data.leadtime_analysis}
+
+${data.pipeline_analysis}
+
+${data.apply_size_analysis}
+
+${data.conversion_rates}
+
+${data.pipeline_prediction}
+
+${data.job_pipeline_trend}
+
+${data.next_month_business_days ? `익월 영업일수: ${data.next_month_business_days}일 (사용자 입력)` : ""}
+
+=== 리포트 템플릿 (이 구조를 정확히 따르세요) ===
+
+# ${data.target_month} 실적 분석 & ${nextMonth}월 전망 리포트
+
+> **분석 기간**: (최근 4개월 범위)
+> **생성 일시**: ${todayLabel}
+> **데이터 소스**: 월통합분석, 지원기준리드타임_raw, 합격기준리드타임_raw
+
+**데이터 구분 가이드**
+
+| 데이터 | 기준 | 분석 목적 | 사용 섹션 |
+테이블로 3개 시트 설명
+
+## Part A. 실적 분석 (합격 기준)
+> 📌 "${month}월에 합격한 사람들" 중심 — 결과 평가, 성과 분석
+
+### 1. Executive Summary
+**${month}월 핵심 성과**
+
+| 구분 | 지표 | 결과 | 평가 |
+🟢 Best / 🟢 Good / 🔴 Alert로 6개 지표 (총 매출, 신규기업 가입, 서류통과 수, 합격 수, 매칭 수, 채용 리드타임(지원→합격))
+⚠️ 채용 리드타임 수치는 반드시 데이터 섹션의 "[Executive Summary 핵심 지표]"에 있는 값을 그대로 사용하세요. 직접 계산하지 마세요.
+
+**한 줄 요약**
+> 인용 블록으로 핵심 메시지 한 문장
+
+**Top 5 핵심 인사이트**
+
+아래 형식을 **정확히** 따라 5개 항목을 작성하세요. 각 항목은 반드시 아래 3줄 구조입니다:
+- 1줄: \`- **[이모지] [제목]**: [현상 설명 (수치 포함)]\`
+- 2줄: \`  - 원인: [왜 이런 현상이 발생했는지 데이터 기반 분석]\`
+- 3줄: \`  - 액션: [구체적인 개선 방안]\`
+
+이모지 규칙: 부정적 → 🔴, 긍정적 → 🟢, 주의 → 🟡
+
+예시:
+- **🔴 매출 17% 하락**: 총 매출 ₩19.4억으로 전월 대비 -17.0% 감소
+  - 원인: 합격수 감소(-18.1%)에 따른 수수료 매출 축소가 주요인
+  - 액션: 파이프라인 전환율 집중 개선 및 고단가 직군 매칭 강화
+
+5가지는 데이터에서 가장 중요한 변화/이슈를 선정하세요:
+- 매출 변화 원인 (수수료/정액제/광고/환불 매출 구분, 환불 매출이 있으면 영향 분석)
+- 합격수/서류통과 수 변화 원인 (직군별, 기업규모별)
+- 리드타임 변화 (어느 단계에서 지연?)
+- 신규기업/매칭 트렌드
+- 익월 전망 또는 기회 요소
+
+### 2. 월별 핵심 KPI 추이
+| 지표 | (4개월 컬럼) | MoM |
+총 매출, 합격 수, 서류통과 수, 매칭 수, 신규기업 가입, 일평균 매출 포함. MoM 컬럼에 수치+이모지.
+
+### 3. 매출 구조 분석
+**${month}월 매출 구성**
+
+| 매출 유형 | 금액 | 비중 | 전월 대비 |
+수수료/정액제/광고/환불(있으면)/합계. 전월 대비 MoM% 포함.
+
+💡 **인사이트**: 수수료 매출 변화 → 건당 단가 추정, 정액제 비중 변화 분석. 환불 매출이 있으면 순매출(수수료-환불) 관점에서 분석.
+
+### 4. 합격자 분석 (합격기준 데이터)
+> 📌 **합격기준리드타임_raw** — ${month}월에 실제 합격한 사람들 기준
+
+#### 4-1. 직군별 합격 실적
+| 순위 | 직군 | 합격 수 | 평균 리드타임(지원→합격) | 비중 |
+TOP 10 + 기타* + 합계. 기타 각주에 세부 직군(건수) 나열.
+
+💡 **직군별 인사이트**
+**수익 기여도:** / **리드타임 패턴:** 소제목으로 분석
+
+#### 4-2. 기업 규모별 합격 실적
+| 기업 규모 | 합격 수 | 평균 리드타임(지원→합격) | 비중 |
+1~4명 ~ 10,001명+ + 미분류 + 합계
+
+💡 **기업규모별 인사이트**
+**핵심 고객군:** / **리드타임 패턴:** 소제목으로 분석
+
+#### 4-3. 채용 리드타임 상세
+> 📌 데이터 섹션의 "[리드타임 분석 - 단계별 소요 기간]" 테이블을 그대로 사용하세요. 빈 셀 없이 모든 값을 포함하세요.
+
+💡 **리드타임 인사이트**: 60일 돌파 등 핵심 이슈 분석
+
+### 5. 실적 기반 성과 평가
+**🟢 긍정 성과**
+
+| 항목 | 수치 | 의미 |
+매출 성장, 건당 단가, 신규기업 가입, 개발 직군 집중 등
+
+**🔴 개선 필요**
+
+| 항목 | 수치 | 분석 | 액션 |
+합격 수 감소, 매칭 수 급감, 리드타임 급증, 영업·정보보호 90일+ 등
+
+---
+
+## Part B. 파이프라인 분석 (지원 기준)
+> 📌 "${month}월에 지원한 사람들" 중심 — 현황 파악, 미래 예측
+
+### 6. 지원 현황 분석 (지원기준 데이터)
+> 📌 **지원기준리드타임_raw** — ${month}월에 지원한 사람들 기준
+
+#### 6-1. 직군별 지원 현황
+| 순위 | 직군 | 지원자 | 서류통과 | 통과율 | 당월합격 | 파이프라인* |
+*파이프라인 = 서류통과 - 당월합격 = **${nextMonth}월 이후 합격 예상 후보군**
+
+💡 **지원 트렌드** (${month}월 vs ${prevMonthLabel})
+📈 급증 직군: / 📉 감소 직군: 테이블로 직군별 변화율+의미
+
+#### 6-2. 기업 규모별 지원 현황
+| 기업 규모 | 지원자 | 서류통과 | 통과율 | 파이프라인 |
+
+💡 **기업규모별 인사이트**
+
+### 7. 퍼널 전환 분석 & 예측
+
+#### 7-1. 지원 → 합격 전환 분포
+> "${month}월 합격자의 45%는 ${prevMonthLabel}에 지원한 사람들"
+
+| 지원 시점 | 합격 전환 비율 | 의미 | 예측 적용 |
+당월/전월⭐/전전월/전전전월 행
+
+💡 **핵심 발견**: ${nextMonth}월 합격 예측의 핵심은 ${month}월 지원 수
+
+#### 7-2. 서류통과 → 합격 전환 분포
+| 서류통과 시점 | 합격 전환 비율 | 누적 | 의미 |
+당월/전월⭐/전전월/전전전월 행
+
+💡 **골든타임**: 서류통과 후 1~2개월 내 집중 관리 → 63.5% 전환
+
+#### 7-3. 전환 인사이트 요약
+| 발견 | 의미 | 액션 |
+합격 선행지표=전월 지원 수, 골든타임=서류통과 후 1개월, 3개월 초과 시 전환율 급감
+
+### 8. ${nextMonth}월 예측 (파이프라인 기반)
+
+#### 8-1. 파이프라인 기반 합격 예측
+데이터 섹션의 "[파이프라인 기반 합격 예측]"의 마크다운 테이블을 그대로 복사하여 출력하세요.
+테이블 위아래에 빈 줄을 넣어 마크다운 테이블이 깨지지 않게 하세요.
+
+#### 8-2. 직군별 ${nextMonth}월 파이프라인
+데이터 섹션의 "[직군별 ${nextMonth}월 파이프라인]"의 마크다운 테이블을 그대로 복사하여 출력하세요.
+테이블 위아래에 빈 줄을 넣어 마크다운 테이블이 깨지지 않게 하세요.
+
+#### 8-3. 시나리오별 ${nextMonth}월 전망
+**💰 매출 시나리오**
+
+| 시나리오 | 예측 매출 | 가정 |
+🟢 낙관/🟡 기본/🔴 보수
+
+**🏢 합격 시나리오**
+
+| 시나리오 | 예측 합격 | 근거 |
+🟢 낙관/🟡 기본/🔴 보수
+
+---
+
+### 9. 리스크 & 기회 요인
+
+**🔴 리스크 요인**
+
+| # | 항목 | 수치 | 영향 | 대응 |
+5개 항목
+
+**🟢 기회 요인**
+
+| # | 항목 | 수치 | 활용 방안 |
+5개 항목
+
+### 10. 핵심 액션 아이템
+
+**🔴 Immediate (${nextMonth}월 내)**
+
+| 우선순위 | 액션 | 대상 | 기대 효과 |
+3개 항목
+
+**📈 Short-term (Q1)**
+
+| 우선순위 | 액션 | 대상 | 기대 효과 |
+3개 항목
+
+**📊 KPI 모니터링 대시보드**
+
+| 지표 | 현재 | ${nextMonth}월 목표 | 측정 기준 |
+전체 리드타임, 서류통과→익월합격 전환율, 매칭→합격 전환율, 신규기업 포지션 등록률
+
+---
+
+**Appendix: 데이터 구조 정리**
+
+A. 데이터 소스별 역할 테이블
+B. 합격기준 vs 지원기준 차이 예시 테이블
+C. 전환율 참조표
+`;
+}
+
+export function generateReport(data: StructuredData): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY가 설정되지 않았습니다.");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: loadSystemPrompt(),
+    generationConfig: { maxOutputTokens: 16384 },
+  });
+
+  return model.generateContent(buildUserPrompt(data)).then((result) => result.response.text());
+}
+
+export function generateReportFallback(data: StructuredData): string {
+  return `# ${data.target_month} 월간 채용 분석 리포트
+
+## Part A. 실적 분석 (합격기준)
+
+### 1. Executive Summary
+
+${data.summary}
+
+### 2. 월별 KPI 추이
+
+${data.monthly_kpi}
+
+### 3. 매출 구조
+
+${data.revenue_breakdown}
+
+### 4. 합격자 분석
+
+#### 4-1. 직군별
+
+${data.job_analysis}
+
+#### 4-2. 기업규모별
+
+${data.size_analysis}
+
+#### 4-3. 리드타임
+
+${data.leadtime_analysis}
+
+---
+
+## Part B. 파이프라인 분석 (지원기준)
+
+### 6. 지원 현황
+
+${data.apply_size_analysis}
+
+### 7. 퍼널 전환 분석
+
+${data.pipeline_analysis}
+
+${data.conversion_rates}
+`;
+}
