@@ -201,7 +201,7 @@ export async function uploadToConfluence(
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Confluence 페이지 생성/수정 실패: ${res.status}. ${body.slice(0, 200)}`);
+    throw new Error(`Confluence 페이지 생성/수정 실패: ${res.status}. ${body.slice(0, 1000)}`);
   }
 
   const result = await res.json();
