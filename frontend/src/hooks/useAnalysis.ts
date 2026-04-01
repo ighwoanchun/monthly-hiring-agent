@@ -51,8 +51,7 @@ export function useAnalysis() {
       setConfluenceUrl(res.page_url);
       return res;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Confluence 업로드 실패");
-      return null;
+      throw e;
     }
   }, [result]);
 
@@ -69,7 +68,7 @@ export function useAnalysis() {
       );
       setSlackSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Slack 전송 실패");
+      throw e;
     }
   }, [result, confluenceUrl]);
 
