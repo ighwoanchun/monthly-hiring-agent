@@ -100,12 +100,23 @@ export function convertMarkdownToConfluence(mdText: string): string {
 
   html = convertInsightsToCards(html);
 
+  // Confluence 미지원 HTML 태그 제거 (내용만 유지)
+  html = html.replace(/<del>(.*?)<\/del>/gs, "$1");
+  html = html.replace(/<ins>(.*?)<\/ins>/gs, "$1");
+  html = html.replace(/<details[^>]*>(.*?)<\/details>/gs, "$1");
+  html = html.replace(/<summary[^>]*>(.*?)<\/summary>/gs, "<strong>$1</strong>");
+  html = html.replace(/<input[^>]*>/g, "");
+
   // 이모지 정규화
   html = html.replace(/\ufe0f/g, "").replace(/\ufe0e/g, "").replace(/\u200d/g, "");
 
   // Confluence가 거부하는 제어 문자 제거 (U+0000~U+001F 중 탭/줄바꿈 제외)
   // eslint-disable-next-line no-control-regex
   html = html.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+
+  // 서로게이트 쌍이 깨진 문자 제거 (Confluence XHTML 파서가 거부)
+  // eslint-disable-next-line no-misleading-character-class
+  html = html.replace(/[\uD800-\uDFFF]/g, "");
 
   return html;
 }
