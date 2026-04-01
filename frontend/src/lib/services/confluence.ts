@@ -40,20 +40,17 @@ function convertInsightsToCards(html: string): string {
   }
 
   const cards = groups.map((g) => {
-    let borderColor = "#EAB308";
-    if (g.title.includes("🔴")) borderColor = "#EF4444";
-    else if (g.title.includes("🟢")) borderColor = "#22C55E";
+    let panelType = "note";
+    if (g.title.includes("🔴")) panelType = "error";
+    else if (g.title.includes("🟢")) panelType = "success";
 
-    let card = `<div style="background-color: #f9fafb; border-left: 4px solid ${borderColor}; border-radius: 4px; padding: 12px 16px; margin: 8px 0;"><div style="font-size: 14px;">${g.title}</div>`;
+    let body = `<p><strong>${g.title}</strong></p>`;
     const subItems: string[] = [];
-    if (g.cause)
-      subItems.push(`<li style="color: #4b5563; margin-bottom: 2px;"><strong>원인:</strong> ${g.cause}</li>`);
-    if (g.action)
-      subItems.push(`<li style="color: #2563eb; margin-bottom: 2px;"><strong>액션:</strong> ${g.action}</li>`);
-    if (subItems.length > 0)
-      card += `<ul style="margin: 6px 0 0 0; padding-left: 20px; font-size: 13px;">${subItems.join("")}</ul>`;
-    card += "</div>";
-    return card;
+    if (g.cause) subItems.push(`<li><strong>원인:</strong> ${g.cause}</li>`);
+    if (g.action) subItems.push(`<li><strong>액션:</strong> ${g.action}</li>`);
+    if (subItems.length > 0) body += `<ul>${subItems.join("")}</ul>`;
+
+    return `<ac:structured-macro ac:name="panel"><ac:parameter ac:name="borderStyle">solid</ac:parameter><ac:parameter ac:name="borderColor">${panelType === "error" ? "#EF4444" : panelType === "success" ? "#22C55E" : "#EAB308"}</ac:parameter><ac:rich-text-body>${body}</ac:rich-text-body></ac:structured-macro>`;
   });
 
   return html.slice(0, match.index!) + heading + "\n" + cards.join("\n") + html.slice(match.index! + match[0].length);
@@ -62,20 +59,21 @@ function convertInsightsToCards(html: string): string {
 export function convertMarkdownToConfluence(mdText: string): string {
   let html = marked.parse(mdText, { async: false, gfm: true }) as string;
 
-  // 코드 블록 스타일
+  // 코드 블록 → Confluence code 매크로
   html = html.replace(
     /<pre><code(?:\s+class="language-(\w+)")?\s*>(.*?)<\/code><\/pre>/gs,
-    (_, _lang, code) =>
-      `<pre style="background-color: #f4f5f7; border: 1px solid #dfe1e6; border-radius: 3px; padding: 12px; overflow-x: auto; font-family: SFMono-Medium, Consolas, monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap;">${code.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')}</pre>`,
+    (_, lang, code) => {
+      const decoded = code.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+      const langParam = lang ? `<ac:parameter ac:name="language">${lang}</ac:parameter>` : "";
+      return `<ac:structured-macro ac:name="code">${langParam}<ac:plain-text-body><![CDATA[${decoded}]]></ac:plain-text-body></ac:structured-macro>`;
+    },
   );
 
-  // blockquote 스타일
+  // blockquote → Confluence info/warning 매크로
   html = html.replace(/<blockquote>(.*?)<\/blockquote>/gs, (_, content) => {
     const c = content.trim();
-    const [bg, border] = ["주의", "⚠️", "Warning"].some((k) => c.includes(k))
-      ? ["#FFFAE6", "#FF8B00"]
-      : ["#DEEBFF", "#0052CC"];
-    return `<div style="background-color: ${bg}; border-left: 4px solid ${border}; padding: 12px 16px; margin: 8px 0; border-radius: 3px;">${c}</div>`;
+    const macroName = ["주의", "⚠️", "Warning"].some((k) => c.includes(k)) ? "warning" : "info";
+    return `<ac:structured-macro ac:name="${macroName}"><ac:rich-text-body>${c}</ac:rich-text-body></ac:structured-macro>`;
   });
 
   // 테이블 스타일
