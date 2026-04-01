@@ -19,100 +19,39 @@ function baseUrl(): string {
   return (process.env.CONFLUENCE_URL || "").replace(/\/$/, "");
 }
 
-function convertInsightsToCards(html: string): string {
-  const pattern =
-    /(<(?:h[23]|p)>.*?Top\s*5\s*핵심\s*인사이트.*?<\/(?:h[23]|p)>)\s*<ul>(.*?)<\/ul>/s;
-  const match = pattern.exec(html);
-  if (!match) return html;
-
-  const heading = match[1];
-  const listHtml = match[2];
-  const liItems = [...listHtml.matchAll(/<li>(.*?)<\/li>/gs)].map((m) => m[1].trim());
-
-  const groups: Array<{ title: string; cause: string; action: string }> = [];
-  for (const text of liItems) {
-    if (/<strong>[🔴🟢🟡]/.test(text)) {
-      groups.push({ title: text, cause: "", action: "" });
-    } else if (groups.length > 0) {
-      if (text.startsWith("원인:")) groups[groups.length - 1].cause = text.slice(3).trim();
-      else if (text.startsWith("액션:")) groups[groups.length - 1].action = text.slice(3).trim();
-    }
-  }
-
-  const cards = groups.map((g) => {
-    let panelType = "note";
-    if (g.title.includes("🔴")) panelType = "error";
-    else if (g.title.includes("🟢")) panelType = "success";
-
-    let body = `<p><strong>${g.title}</strong></p>`;
-    const subItems: string[] = [];
-    if (g.cause) subItems.push(`<li><strong>원인:</strong> ${g.cause}</li>`);
-    if (g.action) subItems.push(`<li><strong>액션:</strong> ${g.action}</li>`);
-    if (subItems.length > 0) body += `<ul>${subItems.join("")}</ul>`;
-
-    return `<ac:structured-macro ac:name="panel"><ac:parameter ac:name="borderStyle">solid</ac:parameter><ac:parameter ac:name="borderColor">${panelType === "error" ? "#EF4444" : panelType === "success" ? "#22C55E" : "#EAB308"}</ac:parameter><ac:rich-text-body>${body}</ac:rich-text-body></ac:structured-macro>`;
-  });
-
-  return html.slice(0, match.index!) + heading + "\n" + cards.join("\n") + html.slice(match.index! + match[0].length);
-}
-
+/**
+ * 마크다운 → Confluence storage format 변환.
+ * Fabric editor 호환을 위해 매크로/인라인 style 없이 기본 HTML만 사용.
+ */
 export function convertMarkdownToConfluence(mdText: string): string {
   let html = marked.parse(mdText, { async: false, gfm: true }) as string;
 
-  // 코드 블록 → Confluence code 매크로
+  // 코드 블록: <pre><code> 유지 (Confluence가 기본 지원)
   html = html.replace(
     /<pre><code(?:\s+class="language-(\w+)")?\s*>(.*?)<\/code><\/pre>/gs,
-    (_, lang, code) => {
-      const decoded = code.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
-      const langParam = lang ? `<ac:parameter ac:name="language">${lang}</ac:parameter>` : "";
-      return `<ac:structured-macro ac:name="code">${langParam}<ac:plain-text-body><![CDATA[${decoded}]]></ac:plain-text-body></ac:structured-macro>`;
-    },
+    (_, _lang, code) => `<pre>${code}</pre>`,
   );
 
-  // blockquote → Confluence info/warning 매크로
-  html = html.replace(/<blockquote>(.*?)<\/blockquote>/gs, (_, content) => {
-    const c = content.trim();
-    const macroName = ["주의", "⚠️", "Warning"].some((k) => c.includes(k)) ? "warning" : "info";
-    return `<ac:structured-macro ac:name="${macroName}"><ac:rich-text-body>${c}</ac:rich-text-body></ac:structured-macro>`;
-  });
-
-  // 테이블 스타일
-  html = html.replace(/<table>/g, '<table style="border-collapse: collapse;">');
-  html = html.replace(
-    /<th>/g,
-    '<th style="background-color: #f4f5f7; border: 1px solid #dfe1e6; padding: 8px 12px; font-weight: bold; text-align: left;">',
-  );
-  html = html.replace(/<td>/g, '<td style="border: 1px solid #dfe1e6; padding: 8px 12px;">');
-  html = html.replace(
-    /<th style="text-align: (\w+);">/g,
-    '<th style="background-color: #f4f5f7; border: 1px solid #dfe1e6; padding: 8px 12px; font-weight: bold; text-align: $1;">',
-  );
-  html = html.replace(
-    /<td style="text-align: (\w+);">/g,
-    '<td style="border: 1px solid #dfe1e6; padding: 8px 12px; text-align: $1;">',
-  );
-  // XHTML 호환: self-closing 태그 변환
-  html = html.replace(/<hr\s*>/g, "<hr />");
-  html = html.replace(/<br\s*>/g, "<br />");
+  // XHTML self-closing 태그
+  html = html.replace(/<hr\s*\/?>/g, "<hr />");
+  html = html.replace(/<br\s*\/?>/g, "<br />");
   html = html.replace(/<img([^>]*?)(?<!\/)>/g, "<img$1 />");
-
-  html = convertInsightsToCards(html);
 
   // Confluence 미지원 HTML 태그 제거 (내용만 유지)
   html = html.replace(/<del>(.*?)<\/del>/gs, "$1");
   html = html.replace(/<ins>(.*?)<\/ins>/gs, "$1");
   html = html.replace(/<details[^>]*>(.*?)<\/details>/gs, "$1");
   html = html.replace(/<summary[^>]*>(.*?)<\/summary>/gs, "<strong>$1</strong>");
-  html = html.replace(/<input[^>]*>/g, "");
+  html = html.replace(/<input[^>]*\/?>/g, "");
 
-  // 이모지 정규화
-  html = html.replace(/\ufe0f/g, "").replace(/\ufe0e/g, "").replace(/\u200d/g, "");
+  // 이모지 variation selector 제거
+  html = html.replace(/[\ufe0f\ufe0e\u200d]/g, "");
 
-  // Confluence가 거부하는 제어 문자 제거 (U+0000~U+001F 중 탭/줄바꿈 제외)
+  // 제어 문자 제거
   // eslint-disable-next-line no-control-regex
   html = html.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
 
-  // 서로게이트 쌍이 깨진 문자 제거 (Confluence XHTML 파서가 거부)
+  // 서로게이트 쌍 깨짐 제거
   // eslint-disable-next-line no-misleading-character-class
   html = html.replace(/[\uD800-\uDFFF]/g, "");
 
