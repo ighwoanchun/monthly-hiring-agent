@@ -64,7 +64,8 @@ export function useAnalysis() {
         result.report.title,
         confluenceUrl || undefined,
         result.summary.indicators,
-        result.summary.one_liner
+        result.summary.one_liner,
+        result.summary.insights,
       );
       setSlackSent(true);
     } catch (e) {

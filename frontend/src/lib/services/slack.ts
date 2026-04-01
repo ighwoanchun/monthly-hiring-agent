@@ -50,16 +50,26 @@ export function extractExecutiveSummary(mdText: string): { indicators: Indicator
   return { indicators, oneLiner };
 }
 
+export interface Insight {
+  emoji: string;
+  title: string;
+  description: string;
+  cause: string;
+  action: string;
+}
+
 export async function sendSlackMessage(
   indicators: Indicator[],
   oneLiner: string,
   confluenceUrl: string,
   title: string,
+  insights?: Insight[],
 ): Promise<string> {
   const token = process.env.SLACK_BOT_TOKEN;
   const channelId = process.env.SLACK_CHANNEL_ID;
   if (!token || !channelId) throw new Error("SLACK_BOT_TOKEN / SLACK_CHANNEL_ID가 설정되지 않았습니다.");
 
+  // Slack Block Kit fields는 최대 10개
   const fields = indicators.map((ind) => ({
     type: "mrkdwn" as const,
     text: `${ind.emoji} *${ind.metric}*\n${ind.result}\n_${ind.evaluation}_`,
@@ -72,17 +82,31 @@ export async function sendSlackMessage(
   ];
 
   if (fields.length > 0) blocks.push({ type: "section", fields });
-  blocks.push({ type: "divider" });
 
   if (oneLiner) {
-    blocks.push({ type: "section", text: { type: "mrkdwn", text: `💬 *한 줄 요약*\n> _${oneLiner}_` } });
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: `> _${oneLiner}_` } });
+  }
+
+  blocks.push({ type: "divider" });
+
+  // Top 3 핵심 인사이트
+  const top3 = (insights || []).slice(0, 3);
+  if (top3.length > 0) {
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: "*Top 3 핵심 인사이트*" } });
+    for (const ins of top3) {
+      let text = `${ins.emoji} *${ins.title}* — ${ins.description}`;
+      if (ins.cause) text += `\n    _원인: ${ins.cause}_`;
+      if (ins.action) text += `\n    _액션: ${ins.action}_`;
+      blocks.push({ type: "section", text: { type: "mrkdwn", text } });
+    }
     blocks.push({ type: "divider" });
   }
 
+  // Confluence 링크
   if (confluenceUrl) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `📄 *전체 리포트 보기*\n<${confluenceUrl}|Confluence에서 전체 리포트 확인하기>` },
+      text: { type: "mrkdwn", text: `📄 <${confluenceUrl}|Confluence에서 전체 리포트 확인하기>` },
     });
   }
 

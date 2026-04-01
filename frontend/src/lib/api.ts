@@ -83,7 +83,8 @@ export async function notifySlack(
   title: string,
   confluenceUrl?: string,
   indicators?: AnalysisResult["summary"]["indicators"],
-  oneLiner?: string
+  oneLiner?: string,
+  insights?: AnalysisResult["summary"]["insights"],
 ): Promise<SlackResult> {
   const res = await fetch(`${API_BASE}/api/slack/notify`, {
     method: "POST",
@@ -94,6 +95,7 @@ export async function notifySlack(
       confluence_url: confluenceUrl || "",
       indicators: indicators || [],
       one_liner: oneLiner || "",
+      insights: insights || [],
     }),
   });
 

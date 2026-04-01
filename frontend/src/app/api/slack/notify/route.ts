@@ -3,12 +3,16 @@
  */
 
 import { NextResponse } from "next/server";
-import { extractExecutiveSummary, sendSlackMessage, type Indicator } from "@/lib/services/slack";
+import { extractExecutiveSummary, sendSlackMessage, type Indicator, type Insight } from "@/lib/services/slack";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { markdown, title, confluence_url = "", indicators: rawIndicators = [], one_liner = "" } = body;
+    const {
+      markdown, title, confluence_url = "",
+      indicators: rawIndicators = [], one_liner = "",
+      insights: rawInsights = [],
+    } = body;
 
     let indicators: Indicator[];
     let oneLiner: string;
@@ -22,7 +26,8 @@ export async function POST(request: Request) {
       oneLiner = extracted.oneLiner;
     }
 
-    const ts = await sendSlackMessage(indicators, oneLiner, confluence_url, title);
+    const insights: Insight[] = rawInsights;
+    const ts = await sendSlackMessage(indicators, oneLiner, confluence_url, title, insights);
     return NextResponse.json({ message_ts: ts });
   } catch (e) {
     return NextResponse.json(
