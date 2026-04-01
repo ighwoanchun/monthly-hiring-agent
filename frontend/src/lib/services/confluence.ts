@@ -60,7 +60,7 @@ function convertInsightsToCards(html: string): string {
 }
 
 export function convertMarkdownToConfluence(mdText: string): string {
-  let html = marked.parse(mdText, { async: false }) as string;
+  let html = marked.parse(mdText, { async: false, gfm: true }) as string;
 
   // 코드 블록 스타일
   html = html.replace(
@@ -93,12 +93,19 @@ export function convertMarkdownToConfluence(mdText: string): string {
     /<td style="text-align: (\w+);">/g,
     '<td style="border: 1px solid #dfe1e6; padding: 8px 12px; text-align: $1;">',
   );
-  html = html.replace(/<hr>/g, "<hr />");
+  // XHTML 호환: self-closing 태그 변환
+  html = html.replace(/<hr\s*>/g, "<hr />");
+  html = html.replace(/<br\s*>/g, "<br />");
+  html = html.replace(/<img([^>]*?)(?<!\/)>/g, "<img$1 />");
 
   html = convertInsightsToCards(html);
 
   // 이모지 정규화
   html = html.replace(/\ufe0f/g, "").replace(/\ufe0e/g, "").replace(/\u200d/g, "");
+
+  // Confluence가 거부하는 제어 문자 제거 (U+0000~U+001F 중 탭/줄바꿈 제외)
+  // eslint-disable-next-line no-control-regex
+  html = html.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
 
   return html;
 }
