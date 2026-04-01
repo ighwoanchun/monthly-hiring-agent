@@ -21,6 +21,7 @@ export default function ReportActions({
 }: ReportActionsProps) {
   const [confluenceLoading, setConfluenceLoading] = useState(false);
   const [slackLoading, setSlackLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDownload = () => {
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
@@ -34,8 +35,11 @@ export default function ReportActions({
 
   const handleConfluence = async () => {
     setConfluenceLoading(true);
+    setError(null);
     try {
       await onConfluence();
+    } catch (e) {
+      setError(`Confluence 업로드 실패: ${e instanceof Error ? e.message : e}`);
     } finally {
       setConfluenceLoading(false);
     }
@@ -43,15 +47,22 @@ export default function ReportActions({
 
   const handleSlack = async () => {
     setSlackLoading(true);
+    setError(null);
     try {
       await onSlack();
+    } catch (e) {
+      setError(`Slack 전송 실패: ${e instanceof Error ? e.message : e}`);
     } finally {
       setSlackLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="space-y-3">
+      {error && (
+        <p className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">{error}</p>
+      )}
+      <div className="flex flex-wrap gap-3">
       <button
         onClick={handleDownload}
         className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
@@ -119,6 +130,7 @@ export default function ReportActions({
         )}
         {slackSent ? "Slack 전송 완료" : "Slack 알림"}
       </button>
+      </div>
     </div>
   );
 }
