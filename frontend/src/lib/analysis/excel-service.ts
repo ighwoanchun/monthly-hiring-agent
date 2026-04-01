@@ -8,6 +8,7 @@ import {
   type HireRawRow,
   type ApplyRawRow,
   type SummaryResult,
+  type ConversionDistribution,
   sameMonth,
   prevMonth,
   calcMom,
@@ -17,7 +18,8 @@ import {
   analyzeByJob,
   analyzeBySize,
   analyzePipeline,
-  CONVERSION_RATES,
+  calculateApplyToHireDistribution,
+  calculatePassToHireDistribution,
 } from "./helpers";
 
 export interface StructuredData {
@@ -393,13 +395,11 @@ function formatApplyBySize(applyRaw: ApplyRawRow[], targetMonth: Date): string {
   return lines.join("\n");
 }
 
-function formatConversionRates(): string {
-  const ar = CONVERSION_RATES.apply_to_hire;
-  const pr = CONVERSION_RATES.pass_to_hire;
+function formatConversionRates(ar: ConversionDistribution, pr: ConversionDistribution): string {
   return [
-    "[전환율 참조값]",
-    `지원→합격: 당월 ${(ar.current * 100).toFixed(1)}% / 전월 ${(ar.prev_1 * 100).toFixed(1)}% / 전전월 ${(ar.prev_2 * 100).toFixed(1)}% / 전전전월 ${(ar.prev_3 * 100).toFixed(1)}%`,
-    `서류통과→합격: 당월 ${(pr.current * 100).toFixed(1)}% / 전월 ${(pr.prev_1 * 100).toFixed(1)}% / 전전월 ${(pr.prev_2 * 100).toFixed(1)}% / 전전전월 ${(pr.prev_3 * 100).toFixed(1)}%`,
+    "[전환율 분포 (실제 데이터 기반 — 합격자 리드타임 역산)]",
+    `지원→합격: 당월 ${(ar.current * 100).toFixed(1)}% / 전월 ${(ar.prev_1 * 100).toFixed(1)}% / 전전월 ${(ar.prev_2 * 100).toFixed(1)}% / 전전전월+ ${(ar.prev_3 * 100).toFixed(1)}%`,
+    `서류통과→합격: 당월 ${(pr.current * 100).toFixed(1)}% / 전월 ${(pr.prev_1 * 100).toFixed(1)}% / 전전월 ${(pr.prev_2 * 100).toFixed(1)}% / 전전전월+ ${(pr.prev_3 * 100).toFixed(1)}%`,
   ].join("\n");
 }
 
@@ -417,17 +417,21 @@ function calcHireDocPassRate(applyRaw: ApplyRawRow[], monthly: MonthlyRow[]): nu
   return rates.length > 0 ? rates.reduce((s, r) => s + r, 0) / rates.length : 0.1;
 }
 
-function formatPipelinePrediction(applyRaw: ApplyRawRow[], monthly: MonthlyRow[], targetMonth: Date): string {
+function formatPipelinePrediction(
+  applyRaw: ApplyRawRow[],
+  monthly: MonthlyRow[],
+  targetMonth: Date,
+  passToHireDist: ConversionDistribution,
+): string {
   const nextMonthNum = targetMonth.getMonth() === 11 ? 1 : targetMonth.getMonth() + 2;
   const avgRate = calcHireDocPassRate(applyRaw, monthly);
-  const dist = CONVERSION_RATES.pass_to_hire;
   const currentHire = monthly.find((r) => sameMonth(r.report_month, targetMonth))?.hire_cnt || 0;
 
   const monthsData: [string, number, number, number][] = [];
   const offsets: [number, number][] = [
-    [0, dist.prev_1],
-    [1, dist.prev_2],
-    [2, dist.prev_3],
+    [0, passToHireDist.prev_1],
+    [1, passToHireDist.prev_2],
+    [2, passToHireDist.prev_3],
   ];
 
   for (const [offset, distPct] of offsets) {
@@ -440,7 +444,7 @@ function formatPipelinePrediction(applyRaw: ApplyRawRow[], monthly: MonthlyRow[]
   }
 
   const totalFromSources = monthsData.reduce((s, [, , , exp]) => s + exp, 0);
-  const knownDist = dist.prev_1 + dist.prev_2 + dist.prev_3;
+  const knownDist = passToHireDist.prev_1 + passToHireDist.prev_2 + passToHireDist.prev_3;
   const otherExpected = knownDist > 0 ? (totalFromSources * (1 - knownDist)) / knownDist : 0;
   const totalExpected = totalFromSources + otherExpected;
 
@@ -527,6 +531,13 @@ export function extractStructuredData(
   const sizeDf = analyzeBySize(hireRaw, tm);
   const pipelineDf = analyzePipeline(applyRaw, tm);
 
+  // 실제 데이터 기반 전환율 계산
+  const applyToHireDist = calculateApplyToHireDistribution(hireRaw, tm);
+  const passToHireDist = calculatePassToHireDistribution(hireRaw, tm);
+
+  console.log("[extractStructuredData] 지원→합격 전환 분포 (실데이터):", JSON.stringify(applyToHireDist));
+  console.log("[extractStructuredData] 서류통과→합격 전환 분포 (실데이터):", JSON.stringify(passToHireDist));
+
   return {
     target_month: monthLabel,
     summary: formatSummary(summaryRaw),
@@ -538,8 +549,8 @@ export function extractStructuredData(
     leadtime_analysis: formatLeadtime(hireRaw, tm),
     pipeline_analysis: formatPipeline(pipelineDf, applyRaw, tm),
     apply_size_analysis: formatApplyBySize(applyRaw, tm),
-    conversion_rates: formatConversionRates(),
-    pipeline_prediction: formatPipelinePrediction(applyRaw, monthly, tm),
+    conversion_rates: formatConversionRates(applyToHireDist, passToHireDist),
+    pipeline_prediction: formatPipelinePrediction(applyRaw, monthly, tm, passToHireDist),
     job_pipeline_trend: formatJobPipelineTrend(applyRaw, monthly, tm),
     next_month_business_days: nextMonthBusinessDays,
   };

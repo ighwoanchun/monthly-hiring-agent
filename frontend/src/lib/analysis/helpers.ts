@@ -72,10 +72,89 @@ export interface PipelineRow {
   pass_rate: number;
 }
 
-export const CONVERSION_RATES = {
+// 하드코딩 참조값 (실데이터 계산 불가 시 fallback)
+export const DEFAULT_CONVERSION_RATES = {
   apply_to_hire: { current: 0.113, prev_1: 0.452, prev_2: 0.258, prev_3: 0.177 },
   pass_to_hire: { current: 0.260, prev_1: 0.375, prev_2: 0.140, prev_3: 0.075 },
 };
+
+export interface ConversionDistribution {
+  current: number;
+  prev_1: number;
+  prev_2: number;
+  prev_3: number;
+}
+
+/**
+ * hire_raw의 total_lead_time(지원→합격 일수)을 역산하여
+ * 합격자가 실제 어느 월에 지원했는지 분포를 계산합니다.
+ */
+export function calculateApplyToHireDistribution(
+  hireRaw: HireRawRow[],
+  targetMonth: Date,
+): ConversionDistribution {
+  const hires = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
+  const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
+  if (totalHires === 0) return DEFAULT_CONVERSION_RATES.apply_to_hire;
+
+  // hire_month 중간점(15일)에서 total_lead_time을 빼서 지원월 추정
+  const refDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 15);
+  const buckets: Record<number, number> = {};
+
+  for (const r of hires) {
+    if (!r.total_lead_time || isNaN(r.total_lead_time)) continue;
+    const applyDate = new Date(refDate.getTime() - r.total_lead_time * 86400000);
+    const monthsBack =
+      (targetMonth.getFullYear() - applyDate.getFullYear()) * 12 +
+      (targetMonth.getMonth() - applyDate.getMonth());
+    const bucket = Math.max(0, monthsBack);
+    buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
+  }
+
+  return {
+    current: (buckets[0] || 0) / totalHires,
+    prev_1: (buckets[1] || 0) / totalHires,
+    prev_2: (buckets[2] || 0) / totalHires,
+    prev_3: Object.entries(buckets)
+      .filter(([k]) => Number(k) >= 3)
+      .reduce((s, [, v]) => s + v, 0) / totalHires,
+  };
+}
+
+/**
+ * hire_raw의 lead_time_doc_pass_to_hire(서류통과→합격 일수)를 역산하여
+ * 합격자가 실제 어느 월에 서류통과했는지 분포를 계산합니다.
+ */
+export function calculatePassToHireDistribution(
+  hireRaw: HireRawRow[],
+  targetMonth: Date,
+): ConversionDistribution {
+  const hires = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
+  const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
+  if (totalHires === 0) return DEFAULT_CONVERSION_RATES.pass_to_hire;
+
+  const refDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 15);
+  const buckets: Record<number, number> = {};
+
+  for (const r of hires) {
+    if (!r.lead_time_doc_pass_to_hire || isNaN(r.lead_time_doc_pass_to_hire)) continue;
+    const passDate = new Date(refDate.getTime() - r.lead_time_doc_pass_to_hire * 86400000);
+    const monthsBack =
+      (targetMonth.getFullYear() - passDate.getFullYear()) * 12 +
+      (targetMonth.getMonth() - passDate.getMonth());
+    const bucket = Math.max(0, monthsBack);
+    buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
+  }
+
+  return {
+    current: (buckets[0] || 0) / totalHires,
+    prev_1: (buckets[1] || 0) / totalHires,
+    prev_2: (buckets[2] || 0) / totalHires,
+    prev_3: Object.entries(buckets)
+      .filter(([k]) => Number(k) >= 3)
+      .reduce((s, [, v]) => s + v, 0) / totalHires,
+  };
+}
 
 export function sameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
