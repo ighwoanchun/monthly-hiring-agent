@@ -25,6 +25,21 @@ export interface HireRawRow {
   lead_time_doc_pass_to_hire: number;
 }
 
+/**
+ * 합격자 개인별 단계 날짜 (합격기준_단계별_날짜_Raw 시트)
+ * apply_date, doc_pass_date, hire_date 는 정확한 일(day) 단위 날짜
+ */
+export interface HireDetailRow {
+  hire_month: Date;
+  application_id: string;
+  apply_date: Date;
+  doc_pass_date: Date;
+  hire_date: Date;
+  job_category: string;
+  company_size: string;
+  hire_count: number;
+}
+
 export interface ApplyRawRow {
   apply_month: Date;
   job_category: string;
@@ -86,18 +101,35 @@ export interface ConversionDistribution {
 }
 
 /**
- * hire_raw의 total_lead_time(지원→합격 일수)을 역산하여
- * 합격자가 실제 어느 월에 지원했는지 분포를 계산합니다.
+ * 합격자 개인별 실측 apply_date를 사용해 월별 지원 시점 분포를 계산합니다.
+ * hireDetail이 없으면 hireRaw의 total_lead_time을 역산하는 폴백을 사용합니다.
  */
 export function calculateApplyToHireDistribution(
   hireRaw: HireRawRow[],
   targetMonth: Date,
+  hireDetail?: HireDetailRow[],
 ): ConversionDistribution {
+  if (hireDetail && hireDetail.length > 0) {
+    const hires = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+    const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
+    if (totalHires > 0) {
+      const buckets: Record<number, number> = {};
+      for (const r of hires) {
+        const monthsBack =
+          (targetMonth.getFullYear() - r.apply_date.getFullYear()) * 12 +
+          (targetMonth.getMonth() - r.apply_date.getMonth());
+        const bucket = Math.max(0, monthsBack);
+        buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
+      }
+      return distributionFromBuckets(buckets, totalHires);
+    }
+  }
+
+  // Fallback: hire_raw의 total_lead_time 역산
   const hires = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
   const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
   if (totalHires === 0) return DEFAULT_CONVERSION_RATES.apply_to_hire;
 
-  // hire_month 중간점(15일)에서 total_lead_time을 빼서 지원월 추정
   const refDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 15);
   const buckets: Record<number, number> = {};
 
@@ -111,24 +143,35 @@ export function calculateApplyToHireDistribution(
     buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
   }
 
-  return {
-    current: (buckets[0] || 0) / totalHires,
-    prev_1: (buckets[1] || 0) / totalHires,
-    prev_2: (buckets[2] || 0) / totalHires,
-    prev_3: Object.entries(buckets)
-      .filter(([k]) => Number(k) >= 3)
-      .reduce((s, [, v]) => s + v, 0) / totalHires,
-  };
+  return distributionFromBuckets(buckets, totalHires);
 }
 
 /**
- * hire_raw의 lead_time_doc_pass_to_hire(서류통과→합격 일수)를 역산하여
- * 합격자가 실제 어느 월에 서류통과했는지 분포를 계산합니다.
+ * 합격자 개인별 실측 doc_pass_date를 사용해 월별 서류통과 시점 분포를 계산합니다.
+ * hireDetail이 없으면 hireRaw의 lead_time_doc_pass_to_hire를 역산하는 폴백을 사용합니다.
  */
 export function calculatePassToHireDistribution(
   hireRaw: HireRawRow[],
   targetMonth: Date,
+  hireDetail?: HireDetailRow[],
 ): ConversionDistribution {
+  if (hireDetail && hireDetail.length > 0) {
+    const hires = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+    const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
+    if (totalHires > 0) {
+      const buckets: Record<number, number> = {};
+      for (const r of hires) {
+        const monthsBack =
+          (targetMonth.getFullYear() - r.doc_pass_date.getFullYear()) * 12 +
+          (targetMonth.getMonth() - r.doc_pass_date.getMonth());
+        const bucket = Math.max(0, monthsBack);
+        buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
+      }
+      return distributionFromBuckets(buckets, totalHires);
+    }
+  }
+
+  // Fallback
   const hires = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
   const totalHires = hires.reduce((s, r) => s + r.hire_count, 0);
   if (totalHires === 0) return DEFAULT_CONVERSION_RATES.pass_to_hire;
@@ -146,6 +189,13 @@ export function calculatePassToHireDistribution(
     buckets[bucket] = (buckets[bucket] || 0) + r.hire_count;
   }
 
+  return distributionFromBuckets(buckets, totalHires);
+}
+
+function distributionFromBuckets(
+  buckets: Record<number, number>,
+  totalHires: number,
+): ConversionDistribution {
   return {
     current: (buckets[0] || 0) / totalHires,
     prev_1: (buckets[1] || 0) / totalHires,
@@ -154,6 +204,73 @@ export function calculatePassToHireDistribution(
       .filter(([k]) => Number(k) >= 3)
       .reduce((s, [, v]) => s + v, 0) / totalHires,
   };
+}
+
+/**
+ * 합격자의 단계별 소요일 통계 (평균·중앙값·90분위)
+ */
+export interface StageDurationStats {
+  stage: string;
+  count: number;
+  mean: number;
+  median: number;
+  p90: number;
+  min: number;
+  max: number;
+}
+
+function percentile(sortedAsc: number[], p: number): number {
+  if (sortedAsc.length === 0) return NaN;
+  const idx = (sortedAsc.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sortedAsc[lo];
+  return sortedAsc[lo] + (sortedAsc[hi] - sortedAsc[lo]) * (idx - lo);
+}
+
+function daysBetween(a: Date, b: Date): number {
+  return (b.getTime() - a.getTime()) / 86400000;
+}
+
+export function calculateStageDurations(
+  hireDetail: HireDetailRow[],
+  targetMonth: Date,
+): StageDurationStats[] {
+  const rows = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+  if (rows.length === 0) return [];
+
+  const applyToDoc: number[] = [];
+  const docToHire: number[] = [];
+  const total: number[] = [];
+
+  for (const r of rows) {
+    const a = daysBetween(r.apply_date, r.doc_pass_date);
+    const b = daysBetween(r.doc_pass_date, r.hire_date);
+    const t = daysBetween(r.apply_date, r.hire_date);
+    if (a >= 0 && isFinite(a)) applyToDoc.push(a);
+    if (b >= 0 && isFinite(b)) docToHire.push(b);
+    if (t >= 0 && isFinite(t)) total.push(t);
+  }
+
+  const summarize = (stage: string, arr: number[]): StageDurationStats => {
+    const sorted = [...arr].sort((x, y) => x - y);
+    const sum = arr.reduce((s, v) => s + v, 0);
+    return {
+      stage,
+      count: arr.length,
+      mean: arr.length ? sum / arr.length : NaN,
+      median: percentile(sorted, 0.5),
+      p90: percentile(sorted, 0.9),
+      min: sorted[0] ?? NaN,
+      max: sorted[sorted.length - 1] ?? NaN,
+    };
+  };
+
+  return [
+    summarize("지원→서류통과", applyToDoc),
+    summarize("서류통과→최종합격", docToHire),
+    summarize("전체 (지원→합격)", total),
+  ];
 }
 
 export function sameMonth(a: Date, b: Date): boolean {

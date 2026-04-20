@@ -6,9 +6,11 @@ import * as XLSX from "xlsx";
 import {
   type MonthlyRow,
   type HireRawRow,
+  type HireDetailRow,
   type ApplyRawRow,
   type SummaryResult,
   type ConversionDistribution,
+  type StageDurationStats,
   sameMonth,
   prevMonth,
   calcMom,
@@ -20,6 +22,7 @@ import {
   analyzePipeline,
   calculateApplyToHireDistribution,
   calculatePassToHireDistribution,
+  calculateStageDurations,
 } from "./helpers";
 
 export interface StructuredData {
@@ -31,12 +34,14 @@ export interface StructuredData {
   job_analysis: string;
   size_analysis: string;
   leadtime_analysis: string;
+  stage_duration_stats: string;
   pipeline_analysis: string;
   apply_size_analysis: string;
   conversion_rates: string;
   pipeline_prediction: string;
   job_pipeline_trend: string;
   next_month_business_days: number;
+  has_hire_detail: boolean;
 }
 
 function parseDate(val: unknown): Date {
@@ -52,16 +57,36 @@ function parseDate(val: unknown): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+/** 일(day) 단위 정확도를 유지하는 날짜 파서 */
+function parseDateExact(val: unknown): Date {
+  if (typeof val === "number") {
+    const p = XLSX.SSF.parse_date_code(val);
+    return new Date(p.y, p.m - 1, p.d);
+  }
+  if (val instanceof Date) {
+    return new Date(val.getFullYear(), val.getMonth(), val.getDate());
+  }
+  const d = new Date(String(val));
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 function loadSheets(buffer: Buffer): {
   monthly: MonthlyRow[];
   applyRaw: ApplyRawRow[];
   hireRaw: HireRawRow[];
+  hireDetail: HireDetailRow[];
 } {
   const wb = XLSX.read(buffer, { type: "buffer" });
 
   const toJson = (name: string) => {
     const sheet = wb.Sheets[name];
     if (!sheet) throw new Error(`시트 '${name}'를 찾을 수 없습니다.`);
+    return XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+  };
+
+  const toJsonOptional = (name: string) => {
+    const sheet = wb.Sheets[name];
+    if (!sheet) return null;
     return XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
   };
 
@@ -97,7 +122,29 @@ function loadSheets(buffer: Buffer): {
     lead_time_doc_pass_to_hire: Number(r.lead_time_doc_pass_to_hire) || 0,
   }));
 
-  return { monthly, applyRaw, hireRaw };
+  // 선택 시트: 합격자 개인별 단계 날짜 (있으면 실측 기반 분석)
+  const detailRaw = toJsonOptional("합격기준_단계별_날짜_Raw");
+  const hireDetail: HireDetailRow[] = detailRaw
+    ? detailRaw
+        .map((r) => ({
+          hire_month: parseDate(r.hire_month),
+          application_id: String(r.application_id ?? ""),
+          apply_date: parseDateExact(r.apply_date),
+          doc_pass_date: parseDateExact(r.doc_pass_date),
+          hire_date: parseDateExact(r.hire_date),
+          job_category: String(r.job_category || ""),
+          company_size: String(r.company_size || ""),
+          hire_count: Number(r.hire_count) || 1,
+        }))
+        .filter(
+          (r) =>
+            !isNaN(r.apply_date.getTime()) &&
+            !isNaN(r.doc_pass_date.getTime()) &&
+            !isNaN(r.hire_date.getTime()),
+        )
+    : [];
+
+  return { monthly, applyRaw, hireRaw, hireDetail };
 }
 
 function formatSummary(s: SummaryResult): string {
@@ -395,12 +442,39 @@ function formatApplyBySize(applyRaw: ApplyRawRow[], targetMonth: Date): string {
   return lines.join("\n");
 }
 
-function formatConversionRates(ar: ConversionDistribution, pr: ConversionDistribution): string {
+function formatConversionRates(
+  ar: ConversionDistribution,
+  pr: ConversionDistribution,
+  hasDetail: boolean,
+): string {
+  const source = hasDetail
+    ? "실측 개인별 날짜 기반 (합격기준_단계별_날짜_Raw)"
+    : "합격자 리드타임 역산 (추정치)";
   return [
-    "[전환율 분포 (실제 데이터 기반 — 합격자 리드타임 역산)]",
+    `[전환율 분포 (${source})]`,
     `지원→합격: 당월 ${(ar.current * 100).toFixed(1)}% / 전월 ${(ar.prev_1 * 100).toFixed(1)}% / 전전월 ${(ar.prev_2 * 100).toFixed(1)}% / 전전전월+ ${(ar.prev_3 * 100).toFixed(1)}%`,
     `서류통과→합격: 당월 ${(pr.current * 100).toFixed(1)}% / 전월 ${(pr.prev_1 * 100).toFixed(1)}% / 전전월 ${(pr.prev_2 * 100).toFixed(1)}% / 전전전월+ ${(pr.prev_3 * 100).toFixed(1)}%`,
   ].join("\n");
+}
+
+function formatStageDurationStats(stats: StageDurationStats[]): string {
+  if (stats.length === 0) return "";
+  const lines = [
+    "[단계별 소요일 분포 (실측 개인별 날짜 기반)]",
+    "| 단계 | 샘플 수 | 평균 | 중앙값 | 90분위 | 최소 | 최대 |",
+    "|---|---|---|---|---|---|---|",
+  ];
+  for (const s of stats) {
+    const fmt = (v: number) => (isFinite(v) ? `${v.toFixed(1)}일` : "-");
+    lines.push(
+      `| ${s.stage} | ${s.count.toLocaleString("ko-KR")} | ${fmt(s.mean)} | ${fmt(s.median)} | ${fmt(s.p90)} | ${fmt(s.min)} | ${fmt(s.max)} |`,
+    );
+  }
+  lines.push("");
+  lines.push(
+    "※ 중앙값과 90분위는 분포 편향을 드러냅니다. 평균이 중앙값보다 크면 장기 지연 합격자가 평균을 끌어올리고 있음을 의미합니다.",
+  );
+  return lines.join("\n");
 }
 
 function calcHireDocPassRate(applyRaw: ApplyRawRow[], monthly: MonthlyRow[]): number {
@@ -503,7 +577,7 @@ export function extractStructuredData(
   targetMonthStr?: string | null,
   nextMonthBusinessDays = 0,
 ): StructuredData {
-  const { monthly, applyRaw, hireRaw } = loadSheets(buffer);
+  const { monthly, applyRaw, hireRaw, hireDetail } = loadSheets(buffer);
 
   // 대상월 결정
   const maxMonth = monthly.reduce((max, r) => (r.report_month > max ? r.report_month : max), monthly[0].report_month);
@@ -531,12 +605,23 @@ export function extractStructuredData(
   const sizeDf = analyzeBySize(hireRaw, tm);
   const pipelineDf = analyzePipeline(applyRaw, tm);
 
-  // 실제 데이터 기반 전환율 계산
-  const applyToHireDist = calculateApplyToHireDistribution(hireRaw, tm);
-  const passToHireDist = calculatePassToHireDistribution(hireRaw, tm);
+  // 실측 개인별 날짜 기반 전환율 계산 (hireDetail 있으면 실측, 없으면 폴백)
+  const hasDetail = hireDetail.length > 0;
+  const applyToHireDist = calculateApplyToHireDistribution(hireRaw, tm, hireDetail);
+  const passToHireDist = calculatePassToHireDistribution(hireRaw, tm, hireDetail);
+  const stageStats = hasDetail ? calculateStageDurations(hireDetail, tm) : [];
 
-  console.log("[extractStructuredData] 지원→합격 전환 분포 (실데이터):", JSON.stringify(applyToHireDist));
-  console.log("[extractStructuredData] 서류통과→합격 전환 분포 (실데이터):", JSON.stringify(passToHireDist));
+  console.log(
+    "[extractStructuredData] hireDetail:",
+    hireDetail.length,
+    "rows / 실측기반:",
+    hasDetail,
+  );
+  console.log("[extractStructuredData] 지원→합격 전환 분포:", JSON.stringify(applyToHireDist));
+  console.log("[extractStructuredData] 서류통과→합격 전환 분포:", JSON.stringify(passToHireDist));
+  if (hasDetail) {
+    console.log("[extractStructuredData] 단계별 소요일 통계:", JSON.stringify(stageStats));
+  }
 
   return {
     target_month: monthLabel,
@@ -547,11 +632,13 @@ export function extractStructuredData(
     job_analysis: formatJobAnalysis(jobDf, hireRaw, tm),
     size_analysis: formatSizeAnalysis(sizeDf),
     leadtime_analysis: formatLeadtime(hireRaw, tm),
+    stage_duration_stats: formatStageDurationStats(stageStats),
     pipeline_analysis: formatPipeline(pipelineDf, applyRaw, tm),
     apply_size_analysis: formatApplyBySize(applyRaw, tm),
-    conversion_rates: formatConversionRates(applyToHireDist, passToHireDist),
+    conversion_rates: formatConversionRates(applyToHireDist, passToHireDist, hasDetail),
     pipeline_prediction: formatPipelinePrediction(applyRaw, monthly, tm, passToHireDist),
     job_pipeline_trend: formatJobPipelineTrend(applyRaw, monthly, tm),
     next_month_business_days: nextMonthBusinessDays,
+    has_hire_detail: hasDetail,
   };
 }
