@@ -11,6 +11,8 @@ import {
   type SummaryResult,
   type ConversionDistribution,
   type StageDurationStats,
+  type JobDurationStats,
+  type DurationTrendRow,
   sameMonth,
   prevMonth,
   calcMom,
@@ -23,6 +25,8 @@ import {
   calculateApplyToHireDistribution,
   calculatePassToHireDistribution,
   calculateStageDurations,
+  calculateJobDurationStats,
+  calculateDurationTrend,
 } from "./helpers";
 
 export interface StructuredData {
@@ -35,6 +39,9 @@ export interface StructuredData {
   size_analysis: string;
   leadtime_analysis: string;
   stage_duration_stats: string;
+  stage_duration_filtered: string;
+  job_duration_stats: string;
+  duration_trend: string;
   pipeline_analysis: string;
   apply_size_analysis: string;
   conversion_rates: string;
@@ -526,7 +533,7 @@ function formatConversionRates(
 function formatStageDurationStats(stats: StageDurationStats[]): string {
   if (stats.length === 0) return "";
   const lines = [
-    "[단계별 소요일 분포 (실측 개인별 날짜 기반)]",
+    "[단계별 소요일 분포 (실측 개인별 날짜 기반, 전체 샘플)]",
     "| 단계 | 샘플 수 | 평균 | 중앙값 | 90분위 | 최소 | 최대 |",
     "|---|---|---|---|---|---|---|",
   ];
@@ -539,6 +546,115 @@ function formatStageDurationStats(stats: StageDurationStats[]): string {
   lines.push("");
   lines.push(
     "※ 중앙값과 90분위는 분포 편향을 드러냅니다. 평균이 중앙값보다 크면 장기 지연 합격자가 평균을 끌어올리고 있음을 의미합니다.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * 이상치(6개월+) 제외한 "정상 전형" 통계 테이블.
+ * 전체 stats 와 나란히 비교 가능.
+ */
+function formatStageDurationFiltered(
+  fullStats: StageDurationStats[],
+  filteredStats: StageDurationStats[],
+): string {
+  if (filteredStats.length === 0) return "";
+  const lines = [
+    "[단계별 소요일 분포 — 이상치 제외 (전체 리드타임 180일 초과 합격자 제외)]",
+    "| 단계 | 샘플 수 (제외 후) | 평균 | 중앙값 | 90분위 |",
+    "|---|---|---|---|---|",
+  ];
+  const fmt = (v: number) => (isFinite(v) ? `${v.toFixed(1)}일` : "-");
+  for (const s of filteredStats) {
+    lines.push(
+      `| ${s.stage} | ${s.count.toLocaleString("ko-KR")} | ${fmt(s.mean)} | ${fmt(s.median)} | ${fmt(s.p90)} |`,
+    );
+  }
+
+  // 이상치 규모 계산
+  const fullTotalCount = fullStats.find((s) => s.stage.startsWith("전체"))?.count ?? 0;
+  const filteredTotalCount = filteredStats.find((s) => s.stage.startsWith("전체"))?.count ?? 0;
+  const excluded = fullTotalCount - filteredTotalCount;
+  const pct = fullTotalCount > 0 ? (excluded / fullTotalCount) * 100 : 0;
+
+  lines.push("");
+  lines.push(
+    `※ 제외된 샘플: ${excluded}명 (전체의 ${pct.toFixed(1)}%). 이 값은 **일반적인 전형 경험**을 대표하며, 90분위가 전체 버전보다 작으면 장기 케이스가 평균을 상당히 왜곡하고 있다는 신호입니다.`,
+  );
+  return lines.join("\n");
+}
+
+function formatJobDurationStats(stats: JobDurationStats[]): string {
+  if (stats.length === 0) return "";
+  const lines = [
+    "[직군별 리드타임 분포 — 90분위 기준 내림차순 (병목 직군 상위)]",
+    "| 순위 | 직군 | 합격 샘플 | 평균 | 중앙값 | 90분위 |",
+    "|---|---|---|---|---|---|",
+  ];
+  const fmt = (v: number) => (isFinite(v) ? `${v.toFixed(1)}일` : "-");
+  stats.slice(0, 10).forEach((s, idx) => {
+    lines.push(
+      `| ${idx + 1} | ${s.job_category} | ${s.count.toLocaleString("ko-KR")} | ${fmt(s.mean)} | ${fmt(s.median)} | ${fmt(s.p90)} |`,
+    );
+  });
+
+  // 최고/최저 직군 자동 요약
+  const worst = stats[0];
+  const best = stats[stats.length - 1];
+  lines.push("");
+  if (worst && best && worst !== best) {
+    lines.push(
+      `※ 가장 느린 직군: **${worst.job_category}** (90분위 ${worst.p90.toFixed(1)}일) / 가장 빠른 직군: **${best.job_category}** (90분위 ${best.p90.toFixed(1)}일)`,
+    );
+  }
+  return lines.join("\n");
+}
+
+function formatDurationTrend(trend: DurationTrendRow[]): string {
+  if (trend.length === 0) return "";
+  const header = trend.map((r) => `${r.month.getFullYear()}-${String(r.month.getMonth() + 1).padStart(2, "0")}`);
+  const fmt = (v: number) => (isFinite(v) ? `${v.toFixed(1)}일` : "-");
+
+  const lines = [
+    "[리드타임 월별 시계열 추이 (최근 4개월, 실측 개인별)]",
+    `| 지표 | ${header.join(" | ")} | 추이 |`,
+    `|---${"|---".repeat(header.length)}|---|`,
+  ];
+
+  const indicators: { label: string; key: keyof DurationTrendRow }[] = [
+    { label: "샘플 수", key: "count" },
+    { label: "평균", key: "mean" },
+    { label: "중앙값", key: "median" },
+    { label: "90분위", key: "p90" },
+  ];
+
+  for (const { label, key } of indicators) {
+    const vals = trend.map((r) => {
+      const v = r[key] as number;
+      if (key === "count") return v.toString();
+      return fmt(v);
+    });
+    const first = trend[0][key] as number;
+    const last = trend[trend.length - 1][key] as number;
+    let trendStr = "-";
+    if (isFinite(first) && isFinite(last) && first !== 0) {
+      const delta = last - first;
+      if (key === "count") {
+        // 샘플 수는 방향성 중립 (감소/증가 자체로는 좋음/나쁨 판단 어려움)
+        trendStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(0)}건`;
+      } else {
+        // 리드타임은 감소가 개선 → 값이 줄어들면 📉(good), 늘어나면 📈(bad)
+        const mom = ((last - first) / first) * 100;
+        const deltaStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}일`;
+        trendStr = `${getStatusEmoji(mom)} ${deltaStr}`;
+      }
+    }
+    lines.push(`| ${label} | ${vals.join(" | ")} | ${trendStr} |`);
+  }
+
+  lines.push("");
+  lines.push(
+    "※ 리드타임 지표는 값이 **감소할수록 개선**입니다 (📉가 긍정, 📈가 악화). 90분위 추이가 **평균·중앙값보다 큰 폭으로 개선되면 장기 지연 케이스가 해결되고 있다**는 의미입니다.",
   );
   return lines.join("\n");
 }
@@ -676,6 +792,11 @@ export function extractStructuredData(
   const applyToHireDist = calculateApplyToHireDistribution(hireRaw, tm, hireDetail);
   const passToHireDist = calculatePassToHireDistribution(hireRaw, tm, hireDetail);
   const stageStats = hasDetail ? calculateStageDurations(hireDetail, tm) : [];
+  const stageStatsFiltered = hasDetail
+    ? calculateStageDurations(hireDetail, tm, { excludeOutliers: true })
+    : [];
+  const jobDurStats = hasDetail ? calculateJobDurationStats(hireDetail, tm) : [];
+  const durTrend = hasDetail ? calculateDurationTrend(hireDetail, tm, 4) : [];
 
   console.log(
     "[extractStructuredData] hireDetail:",
@@ -687,6 +808,9 @@ export function extractStructuredData(
   console.log("[extractStructuredData] 서류통과→합격 전환 분포:", JSON.stringify(passToHireDist));
   if (hasDetail) {
     console.log("[extractStructuredData] 단계별 소요일 통계:", JSON.stringify(stageStats));
+    console.log("[extractStructuredData] 단계별 소요일 통계 (이상치제외):", JSON.stringify(stageStatsFiltered));
+    console.log("[extractStructuredData] 직군별 리드타임:", JSON.stringify(jobDurStats.slice(0, 5)));
+    console.log("[extractStructuredData] 시계열 추이:", JSON.stringify(durTrend));
   }
 
   return {
@@ -699,6 +823,9 @@ export function extractStructuredData(
     size_analysis: formatSizeAnalysis(sizeDf, hasDetail),
     leadtime_analysis: formatLeadtime(hireRaw, tm, hireDetail),
     stage_duration_stats: formatStageDurationStats(stageStats),
+    stage_duration_filtered: formatStageDurationFiltered(stageStats, stageStatsFiltered),
+    job_duration_stats: formatJobDurationStats(jobDurStats),
+    duration_trend: formatDurationTrend(durTrend),
     pipeline_analysis: formatPipeline(pipelineDf, applyRaw, tm),
     apply_size_analysis: formatApplyBySize(applyRaw, tm),
     conversion_rates: formatConversionRates(applyToHireDist, passToHireDist, hasDetail),

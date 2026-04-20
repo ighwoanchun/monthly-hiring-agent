@@ -234,12 +234,18 @@ function daysBetween(a: Date, b: Date): number {
   return (b.getTime() - a.getTime()) / 86400000;
 }
 
+const OUTLIER_THRESHOLD_DAYS = 180;
+
 export function calculateStageDurations(
   hireDetail: HireDetailRow[],
   targetMonth: Date,
+  options?: { excludeOutliers?: boolean; outlierDays?: number },
 ): StageDurationStats[] {
   const rows = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
   if (rows.length === 0) return [];
+
+  const threshold = options?.outlierDays ?? OUTLIER_THRESHOLD_DAYS;
+  const exclude = options?.excludeOutliers ?? false;
 
   const applyToDoc: number[] = [];
   const docToHire: number[] = [];
@@ -249,9 +255,12 @@ export function calculateStageDurations(
     const a = daysBetween(r.apply_date, r.doc_pass_date);
     const b = daysBetween(r.doc_pass_date, r.hire_date);
     const t = daysBetween(r.apply_date, r.hire_date);
-    if (a >= 0 && isFinite(a)) applyToDoc.push(a);
-    if (b >= 0 && isFinite(b)) docToHire.push(b);
-    if (t >= 0 && isFinite(t)) total.push(t);
+    const skip = exclude && t > threshold;
+    if (!skip) {
+      if (a >= 0 && isFinite(a)) applyToDoc.push(a);
+      if (b >= 0 && isFinite(b)) docToHire.push(b);
+      if (t >= 0 && isFinite(t)) total.push(t);
+    }
   }
 
   const summarize = (stage: string, arr: number[]): StageDurationStats => {
@@ -273,6 +282,94 @@ export function calculateStageDurations(
     summarize("서류통과→최종합격", docToHire),
     summarize("전체 (지원→합격)", total),
   ];
+}
+
+/**
+ * 직군별 전체 리드타임(지원→합격) 평균/중앙값/90분위/샘플수.
+ * p90 내림차순 정렬 (병목 직군 상위 노출).
+ */
+export interface JobDurationStats {
+  job_category: string;
+  count: number;
+  mean: number;
+  median: number;
+  p90: number;
+}
+
+export function calculateJobDurationStats(
+  hireDetail: HireDetailRow[],
+  targetMonth: Date,
+): JobDurationStats[] {
+  const rows = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+  if (rows.length === 0) return [];
+
+  const groups = new Map<string, number[]>();
+  for (const r of rows) {
+    const cat = r.job_category || "미분류";
+    const d = daysBetween(r.apply_date, r.hire_date);
+    if (d >= 0 && isFinite(d)) {
+      const arr = groups.get(cat) || [];
+      arr.push(d);
+      groups.set(cat, arr);
+    }
+  }
+
+  const result: JobDurationStats[] = [];
+  for (const [cat, arr] of groups) {
+    if (arr.length === 0) continue;
+    const sorted = [...arr].sort((x, y) => x - y);
+    result.push({
+      job_category: cat,
+      count: arr.length,
+      mean: arr.reduce((s, v) => s + v, 0) / arr.length,
+      median: percentile(sorted, 0.5),
+      p90: percentile(sorted, 0.9),
+    });
+  }
+
+  // p90 내림차순 (가장 느린 직군 상위)
+  result.sort((a, b) => b.p90 - a.p90);
+  return result;
+}
+
+/**
+ * 최근 N개월 리드타임 시계열 (평균/중앙값/90분위).
+ * 월별 트렌드(개선/악화) 가시화.
+ */
+export interface DurationTrendRow {
+  month: Date;
+  count: number;
+  mean: number;
+  median: number;
+  p90: number;
+}
+
+export function calculateDurationTrend(
+  hireDetail: HireDetailRow[],
+  targetMonth: Date,
+  nMonths = 4,
+): DurationTrendRow[] {
+  const result: DurationTrendRow[] = [];
+  for (let i = nMonths - 1; i >= 0; i--) {
+    const m = addMonths(targetMonth, -i);
+    const rows = hireDetail.filter((r) => sameMonth(r.hire_month, m));
+    const durations = rows
+      .map((r) => daysBetween(r.apply_date, r.hire_date))
+      .filter((v) => v >= 0 && isFinite(v))
+      .sort((a, b) => a - b);
+    if (durations.length === 0) {
+      result.push({ month: m, count: 0, mean: NaN, median: NaN, p90: NaN });
+      continue;
+    }
+    result.push({
+      month: m,
+      count: durations.length,
+      mean: durations.reduce((s, v) => s + v, 0) / durations.length,
+      median: percentile(durations, 0.5),
+      p90: percentile(durations, 0.9),
+    });
+  }
+  return result;
 }
 
 export function sameMonth(a: Date, b: Date): boolean {
