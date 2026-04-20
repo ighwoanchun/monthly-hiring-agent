@@ -44,6 +44,15 @@ export interface StructuredData {
   has_hire_detail: boolean;
 }
 
+/**
+ * 기업 규모 문자열의 tilde(~)를 전각 wave dash(〜, U+301C)로 치환.
+ * remark-gfm 이 `~text~`를 strikethrough로 해석하는 이슈 회피.
+ * 예: "5001~10000" → "5001〜10000"
+ */
+function sanitizeSize(size: string): string {
+  return size.replace(/~/g, "〜");
+}
+
 function parseDate(val: unknown): Date {
   if (typeof val === "number") {
     // Excel serial date → XLSX가 정확한 y/m/d를 반환
@@ -308,7 +317,7 @@ function formatSizeAnalysis(rows: ReturnType<typeof analyzeBySize>): string {
 
   for (const r of rows) {
     const lt = !isNaN(r.avg_lead_time) ? `${r.avg_lead_time.toFixed(1)}일` : "-";
-    const name = r.company_size || "미분류";
+    const name = sanitizeSize(r.company_size || "미분류");
     lines.push(`| ${name} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${lt} |`);
   }
 
@@ -436,7 +445,7 @@ function formatApplyBySize(applyRaw: ApplyRawRow[], targetMonth: Date): string {
   lines.push("|---|---|---|---|---|");
   for (const r of rows) {
     lines.push(
-      `| ${r.company_size} | ${r.applicant_count.toFixed(0)} | ${r.doc_pass_count.toFixed(0)} | ${r.pass_rate.toFixed(1)}% | ${r.pipeline.toFixed(0)} |`,
+      `| ${sanitizeSize(r.company_size)} | ${r.applicant_count.toFixed(0)} | ${r.doc_pass_count.toFixed(0)} | ${r.pass_rate.toFixed(1)}% | ${r.pipeline.toFixed(0)} |`,
     );
   }
   return lines.join("\n");
