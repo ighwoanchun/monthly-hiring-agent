@@ -68,6 +68,7 @@ export interface JobAnalysisRow {
   job_category: string;
   hire_count: number;
   avg_lead_time: number;
+  median_lead_time: number;
   ratio: number;
 }
 
@@ -75,6 +76,7 @@ export interface SizeAnalysisRow {
   company_size: string;
   hire_count: number;
   avg_lead_time: number;
+  median_lead_time: number;
   ratio: number;
 }
 
@@ -330,10 +332,18 @@ function groupBy<T>(arr: T[], keyFn: (item: T) => string): Map<string, T[]> {
   return map;
 }
 
+function meanFromDetail(rows: HireDetailRow[]): number {
+  const ds = rows
+    .map((r) => daysBetween(r.apply_date, r.hire_date))
+    .filter((v) => v >= 0 && isFinite(v));
+  return ds.length ? ds.reduce((s, v) => s + v, 0) / ds.length : NaN;
+}
+
 export function generateSummary(
   monthly: MonthlyRow[],
   targetMonth: Date,
   hireRaw?: HireRawRow[],
+  hireDetail?: HireDetailRow[],
 ): SummaryResult {
   let currentIdx = monthly.findIndex((r) => sameMonth(r.report_month, targetMonth));
   if (currentIdx === -1) currentIdx = monthly.length - 1;
@@ -356,6 +366,18 @@ export function generateSummary(
     lead_time_mom: NaN,
   };
 
+  // 실측 우선
+  if (hireDetail && hireDetail.length > 0) {
+    const pm = prevMonth(targetMonth);
+    const curLt = meanFromDetail(hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth)));
+    const prevLt = meanFromDetail(hireDetail.filter((r) => sameMonth(r.hire_month, pm)));
+    if (!isNaN(curLt)) {
+      result.lead_time = curLt;
+      result.lead_time_mom = !isNaN(prevLt) ? calcMom(curLt, prevLt) : NaN;
+      return result;
+    }
+  }
+
   if (hireRaw) {
     const data = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
     const pm = prevMonth(targetMonth);
@@ -371,7 +393,12 @@ export function generateSummary(
   return result;
 }
 
-export function analyzeByJob(hireRaw: HireRawRow[], targetMonth: Date): JobAnalysisRow[] {
+export function analyzeByJob(
+  hireRaw: HireRawRow[],
+  targetMonth: Date,
+  hireDetail?: HireDetailRow[],
+): JobAnalysisRow[] {
+  // count/ratio 는 항상 hireRaw (완전 집계, monthly.hire_cnt 와 일치)
   const data = hireRaw
     .filter((r) => sameMonth(r.hire_month, targetMonth))
     .map((r) => ({ ...r, job_category: r.job_category || "미분류" }));
@@ -379,12 +406,39 @@ export function analyzeByJob(hireRaw: HireRawRow[], targetMonth: Date): JobAnaly
   const groups = groupBy(data, (r) => r.job_category);
   const rows: JobAnalysisRow[] = [];
 
+  // 리드타임: hireDetail 있으면 실측 그룹화, 없으면 집계 가중평균 폴백
+  const detailByCat = new Map<string, number[]>();
+  if (hireDetail && hireDetail.length > 0) {
+    const filtered = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+    for (const r of filtered) {
+      const cat = r.job_category || "미분류";
+      const d = daysBetween(r.apply_date, r.hire_date);
+      if (d >= 0 && isFinite(d)) {
+        const arr = detailByCat.get(cat) || [];
+        arr.push(d);
+        detailByCat.set(cat, arr);
+      }
+    }
+  }
+
   for (const [category, items] of groups) {
     const hireCount = items.reduce((s, r) => s + r.hire_count, 0);
+    const durations = detailByCat.get(category);
+    let avgLt: number;
+    let medianLt: number;
+    if (durations && durations.length > 0) {
+      const sorted = [...durations].sort((a, b) => a - b);
+      avgLt = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+      medianLt = percentile(sorted, 0.5);
+    } else {
+      avgLt = weightedAvg(items, "total_lead_time", "hire_count");
+      medianLt = NaN;
+    }
     rows.push({
       job_category: category,
       hire_count: hireCount,
-      avg_lead_time: weightedAvg(items, "total_lead_time", "hire_count"),
+      avg_lead_time: avgLt,
+      median_lead_time: medianLt,
       ratio: 0,
     });
   }
@@ -396,12 +450,17 @@ export function analyzeByJob(hireRaw: HireRawRow[], targetMonth: Date): JobAnaly
   return rows;
 }
 
-export function analyzeBySize(hireRaw: HireRawRow[], targetMonth: Date): SizeAnalysisRow[] {
+export function analyzeBySize(
+  hireRaw: HireRawRow[],
+  targetMonth: Date,
+  hireDetail?: HireDetailRow[],
+): SizeAnalysisRow[] {
   const SIZE_ORDER = [
     "1~4", "5~10", "11~50", "51~200", "201~500",
     "501~1000", "1001~5000", "5001~10000", "10001~",
   ];
 
+  // count/ratio는 hireRaw (완전 집계)
   const data = hireRaw
     .filter((r) => sameMonth(r.hire_month, targetMonth))
     .map((r) => ({ ...r, company_size: r.company_size || "미분류" }));
@@ -409,11 +468,39 @@ export function analyzeBySize(hireRaw: HireRawRow[], targetMonth: Date): SizeAna
   const groups = groupBy(data, (r) => r.company_size);
   const rows: SizeAnalysisRow[] = [];
 
+  // 리드타임: hireDetail 그룹화
+  const detailBySize = new Map<string, number[]>();
+  if (hireDetail && hireDetail.length > 0) {
+    const filtered = hireDetail.filter((r) => sameMonth(r.hire_month, targetMonth));
+    for (const r of filtered) {
+      const sz = r.company_size || "미분류";
+      const d = daysBetween(r.apply_date, r.hire_date);
+      if (d >= 0 && isFinite(d)) {
+        const arr = detailBySize.get(sz) || [];
+        arr.push(d);
+        detailBySize.set(sz, arr);
+      }
+    }
+  }
+
   for (const [size, items] of groups) {
+    const hireCount = items.reduce((s, r) => s + r.hire_count, 0);
+    const durations = detailBySize.get(size);
+    let avgLt: number;
+    let medianLt: number;
+    if (durations && durations.length > 0) {
+      const sorted = [...durations].sort((a, b) => a - b);
+      avgLt = sorted.reduce((s, v) => s + v, 0) / sorted.length;
+      medianLt = percentile(sorted, 0.5);
+    } else {
+      avgLt = weightedAvg(items, "total_lead_time", "hire_count");
+      medianLt = NaN;
+    }
     rows.push({
       company_size: size,
-      hire_count: items.reduce((s, r) => s + r.hire_count, 0),
-      avg_lead_time: weightedAvg(items, "total_lead_time", "hire_count"),
+      hire_count: hireCount,
+      avg_lead_time: avgLt,
+      median_lead_time: medianLt,
       ratio: 0,
     });
   }

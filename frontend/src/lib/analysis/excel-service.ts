@@ -269,6 +269,7 @@ function formatJobAnalysis(
   rows: ReturnType<typeof analyzeByJob>,
   hireRaw?: HireRawRow[],
   targetMonth?: Date,
+  hasDetail = false,
 ): string {
   // 전월 데이터 구하기
   let prevByJob: Map<string, number> | undefined;
@@ -282,85 +283,141 @@ function formatJobAnalysis(
     }
   }
 
-  const lines = ["[직군별 합격 분석]"];
-  lines.push("| 직군 | 합격 수 | 비율 | 전월 | 증감% | 상태 | 평균 리드타임(지원→합격) |");
-  lines.push("|---|---|---|---|---|---|---|");
+  const source = hasDetail ? "실측 개인별 날짜" : "집계 가중평균";
+  const lines = [`[직군별 합격 분석 — 리드타임 ${source} 기반]`];
+  if (hasDetail) {
+    lines.push("| 직군 | 합격 수 | 비율 | 전월 | 증감% | 상태 | 평균 리드타임 | 중앙값 |");
+    lines.push("|---|---|---|---|---|---|---|---|");
+  } else {
+    lines.push("| 직군 | 합격 수 | 비율 | 전월 | 증감% | 상태 | 평균 리드타임(지원→합격) |");
+    lines.push("|---|---|---|---|---|---|---|");
+  }
 
   const top10 = rows.slice(0, 10);
   const others = rows.slice(10);
 
   for (const r of top10) {
     const lt = !isNaN(r.avg_lead_time) ? `${r.avg_lead_time.toFixed(1)}일` : "-";
+    const med = !isNaN(r.median_lead_time) ? `${r.median_lead_time.toFixed(1)}일` : "-";
     const prev = prevByJob?.get(r.job_category);
     const prevStr = prev != null ? prev.toFixed(0) : "-";
     const mom = prev != null && prev > 0 ? calcMom(r.hire_count, prev) : NaN;
     const momStr = !isNaN(mom) ? `${mom >= 0 ? "+" : ""}${mom.toFixed(1)}%` : "-";
     const emoji = !isNaN(mom) ? getStatusEmoji(mom) : "-";
-    lines.push(`| ${r.job_category} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${prevStr} | ${momStr} | ${emoji} | ${lt} |`);
+    if (hasDetail) {
+      lines.push(
+        `| ${r.job_category} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${prevStr} | ${momStr} | ${emoji} | ${lt} | ${med} |`,
+      );
+    } else {
+      lines.push(
+        `| ${r.job_category} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${prevStr} | ${momStr} | ${emoji} | ${lt} |`,
+      );
+    }
   }
 
   if (others.length > 0) {
     const sum = others.reduce((s, r) => s + r.hire_count, 0);
     const ratioSum = others.reduce((s, r) => s + r.ratio, 0);
-    lines.push(`| 기타 (${others.length}개 직군) | ${sum.toFixed(0)} | ${ratioSum.toFixed(1)}% | - | - | - | - |`);
+    const dashes = hasDetail ? "- | - | - | - | -" : "- | - | - | -";
+    lines.push(`| 기타 (${others.length}개 직군) | ${sum.toFixed(0)} | ${ratioSum.toFixed(1)}% | ${dashes} |`);
   }
 
   const total = rows.reduce((s, r) => s + r.hire_count, 0);
-  lines.push(`| **합계** | **${total.toFixed(0)}** | **100%** | | | | |`);
+  const emptyTail = hasDetail ? " | | | | | |" : " | | | | |";
+  lines.push(`| **합계** | **${total.toFixed(0)}** | **100%** |${emptyTail}`);
   return lines.join("\n");
 }
 
-function formatSizeAnalysis(rows: ReturnType<typeof analyzeBySize>): string {
-  const lines = ["[기업규모별 합격 분석]"];
-  lines.push("| 기업규모 | 합격 수 | 비율 | 평균 리드타임(지원→합격) |");
-  lines.push("|---|---|---|---|");
+function formatSizeAnalysis(rows: ReturnType<typeof analyzeBySize>, hasDetail = false): string {
+  const source = hasDetail ? "실측 개인별 날짜" : "집계 가중평균";
+  const lines = [`[기업규모별 합격 분석 — 리드타임 ${source} 기반]`];
+  if (hasDetail) {
+    lines.push("| 기업규모 | 합격 수 | 비율 | 평균 리드타임 | 중앙값 |");
+    lines.push("|---|---|---|---|---|");
+  } else {
+    lines.push("| 기업규모 | 합격 수 | 비율 | 평균 리드타임(지원→합격) |");
+    lines.push("|---|---|---|---|");
+  }
 
   for (const r of rows) {
     const lt = !isNaN(r.avg_lead_time) ? `${r.avg_lead_time.toFixed(1)}일` : "-";
+    const med = !isNaN(r.median_lead_time) ? `${r.median_lead_time.toFixed(1)}일` : "-";
     const name = sanitizeSize(r.company_size || "미분류");
-    lines.push(`| ${name} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${lt} |`);
+    if (hasDetail) {
+      lines.push(`| ${name} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${lt} | ${med} |`);
+    } else {
+      lines.push(`| ${name} | ${r.hire_count.toFixed(0)} | ${r.ratio.toFixed(1)}% | ${lt} |`);
+    }
   }
 
   const total = rows.reduce((s, r) => s + r.hire_count, 0);
-  lines.push(`| **합계** | **${total.toFixed(0)}** | **100%** | |`);
+  const tail = hasDetail ? " | |" : " |";
+  lines.push(`| **합계** | **${total.toFixed(0)}** | **100%** |${tail}`);
   return lines.join("\n");
 }
 
-function formatLeadtime(hireRaw: HireRawRow[], targetMonth: Date): string {
-  const data = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
-  if (data.length === 0) return "[리드타임 분석]\n데이터 없음";
+function formatLeadtime(
+  hireRaw: HireRawRow[],
+  targetMonth: Date,
+  hireDetail?: HireDetailRow[],
+): string {
+  const hasDetail = hireDetail !== undefined && hireDetail.length > 0;
+  const source = hasDetail ? "실측 개인별 날짜" : "집계 가중평균";
 
   const pm = prevMonth(targetMonth);
-  const prevData = hireRaw.filter((r) => sameMonth(r.hire_month, pm));
-
-  const steps: [string, string][] = [
-    ["lead_time_to_doc_pass", "지원→서류통과"],
-    ["lead_time_doc_pass_to_hire", "서류통과→최종합격"],
-    ["total_lead_time", "전체 리드타임"],
-  ];
-
-  const prevLabel = prevData.length > 0 ? `${pm.getMonth() + 1}월` : "전월";
+  const prevLabel = `${pm.getMonth() + 1}월`;
   const curLabel = `${targetMonth.getMonth() + 1}월`;
 
-  const lines = ["[리드타임 분석 - 단계별 소요 기간 (전월 비교)]"];
+  const lines = [`[리드타임 분석 - 단계별 소요 기간 (전월 비교, ${source} 기반)]`];
   lines.push(`| 단계 | ${prevLabel} | ${curLabel} | 변화 | 상태 |`);
   lines.push("|---|---|---|---|---|");
 
-  for (const [col, label] of steps) {
-    const curVal = weightedAvg(data, col as keyof HireRawRow & string, "hire_count");
-    const prevVal = prevData.length > 0 ? weightedAvg(prevData, col as keyof HireRawRow & string, "hire_count") : NaN;
+  // 각 단계별로 curVal, prevVal 계산
+  type StageCalc = { label: string; cur: number; prev: number };
+  const stages: StageCalc[] = [];
 
-    const curStr = !isNaN(curVal) ? `${curVal.toFixed(1)}일` : "-";
-    const prevStr = !isNaN(prevVal) ? `${prevVal.toFixed(1)}일` : "-";
+  if (hasDetail) {
+    const detailCur = hireDetail!.filter((r) => sameMonth(r.hire_month, targetMonth));
+    const detailPrev = hireDetail!.filter((r) => sameMonth(r.hire_month, pm));
+    const mean = (rows: HireDetailRow[], extract: (r: HireDetailRow) => number): number => {
+      const vs = rows.map(extract).filter((v) => v >= 0 && isFinite(v));
+      return vs.length ? vs.reduce((s, v) => s + v, 0) / vs.length : NaN;
+    };
+    const toDoc = (r: HireDetailRow) => (r.doc_pass_date.getTime() - r.apply_date.getTime()) / 86400000;
+    const docToHire = (r: HireDetailRow) => (r.hire_date.getTime() - r.doc_pass_date.getTime()) / 86400000;
+    const total = (r: HireDetailRow) => (r.hire_date.getTime() - r.apply_date.getTime()) / 86400000;
 
+    stages.push({ label: "지원→서류통과", cur: mean(detailCur, toDoc), prev: mean(detailPrev, toDoc) });
+    stages.push({ label: "서류통과→최종합격", cur: mean(detailCur, docToHire), prev: mean(detailPrev, docToHire) });
+    stages.push({ label: "전체 리드타임", cur: mean(detailCur, total), prev: mean(detailPrev, total) });
+  } else {
+    const data = hireRaw.filter((r) => sameMonth(r.hire_month, targetMonth));
+    if (data.length === 0) return "[리드타임 분석]\n데이터 없음";
+    const prevData = hireRaw.filter((r) => sameMonth(r.hire_month, pm));
+    const cols: [string, string][] = [
+      ["lead_time_to_doc_pass", "지원→서류통과"],
+      ["lead_time_doc_pass_to_hire", "서류통과→최종합격"],
+      ["total_lead_time", "전체 리드타임"],
+    ];
+    for (const [col, label] of cols) {
+      stages.push({
+        label,
+        cur: weightedAvg(data, col as keyof HireRawRow & string, "hire_count"),
+        prev: prevData.length > 0 ? weightedAvg(prevData, col as keyof HireRawRow & string, "hire_count") : NaN,
+      });
+    }
+  }
+
+  for (const { label, cur, prev } of stages) {
+    const curStr = !isNaN(cur) ? `${cur.toFixed(1)}일` : "-";
+    const prevStr = !isNaN(prev) ? `${prev.toFixed(1)}일` : "-";
     let diffStr = "-";
     let emoji = "➡️";
-    if (!isNaN(curVal) && !isNaN(prevVal)) {
-      const diff = curVal - prevVal;
+    if (!isNaN(cur) && !isNaN(prev)) {
+      const diff = cur - prev;
       diffStr = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}일`;
-      emoji = getStatusEmoji(calcMom(curVal, prevVal));
+      emoji = getStatusEmoji(calcMom(cur, prev));
     }
-
     lines.push(`| ${label} | ${prevStr} | ${curStr} | ${diffStr} | ${emoji} |`);
   }
 
@@ -609,9 +666,9 @@ export function extractStructuredData(
 
   const monthLabel = `${tm.getFullYear()}년 ${tm.getMonth() + 1}월`;
 
-  const summaryRaw = generateSummary(monthly, tm, hireRaw);
-  const jobDf = analyzeByJob(hireRaw, tm);
-  const sizeDf = analyzeBySize(hireRaw, tm);
+  const summaryRaw = generateSummary(monthly, tm, hireRaw, hireDetail);
+  const jobDf = analyzeByJob(hireRaw, tm, hireDetail);
+  const sizeDf = analyzeBySize(hireRaw, tm, hireDetail);
   const pipelineDf = analyzePipeline(applyRaw, tm);
 
   // 실측 개인별 날짜 기반 전환율 계산 (hireDetail 있으면 실측, 없으면 폴백)
@@ -638,9 +695,9 @@ export function extractStructuredData(
     summary_raw: summaryRaw,
     monthly_kpi: formatMonthlyKpi(monthly, tm),
     revenue_breakdown: formatRevenue(monthly, tm),
-    job_analysis: formatJobAnalysis(jobDf, hireRaw, tm),
-    size_analysis: formatSizeAnalysis(sizeDf),
-    leadtime_analysis: formatLeadtime(hireRaw, tm),
+    job_analysis: formatJobAnalysis(jobDf, hireRaw, tm, hasDetail),
+    size_analysis: formatSizeAnalysis(sizeDf, hasDetail),
+    leadtime_analysis: formatLeadtime(hireRaw, tm, hireDetail),
     stage_duration_stats: formatStageDurationStats(stageStats),
     pipeline_analysis: formatPipeline(pipelineDf, applyRaw, tm),
     apply_size_analysis: formatApplyBySize(applyRaw, tm),
