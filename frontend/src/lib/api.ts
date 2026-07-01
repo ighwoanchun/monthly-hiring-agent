@@ -33,6 +33,13 @@ export interface SlackResult {
   message_ts: string;
 }
 
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function analyzeExcel(
   file: File,
   targetMonth?: string,
@@ -47,17 +54,35 @@ export async function analyzeExcel(
     formData.append("next_month_business_days", String(nextMonthBusinessDays));
   }
 
-  const res = await fetch(`${API_BASE}/api/analyze`, {
+  const submitRes = await fetch(`${API_BASE}/api/analyze`, {
     method: "POST",
     body: formData,
   });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
+  if (!submitRes.ok) {
+    const err = await submitRes.json().catch(() => ({ detail: submitRes.statusText }));
     throw new Error(err.detail || "분석 실패");
   }
 
-  return res.json();
+  const { jobId } = await submitRes.json();
+
+  // 인그레스 타임아웃(약 30초)보다 오래 걸리는 분석을 폴링으로 우회
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    const pollRes = await fetch(`${API_BASE}/api/analyze/${jobId}`);
+
+    if (pollRes.status === 202) continue;
+
+    if (!pollRes.ok) {
+      const err = await pollRes.json().catch(() => ({ detail: pollRes.statusText }));
+      throw new Error(err.detail || "분석 실패");
+    }
+
+    return pollRes.json();
+  }
+
+  throw new Error("분석 시간이 너무 오래 걸립니다. 잠시 후 다시 시도해주세요.");
 }
 
 export async function uploadToConfluence(

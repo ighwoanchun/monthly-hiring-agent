@@ -5,6 +5,8 @@
 import { NextResponse } from "next/server";
 import { extractStructuredData } from "@/lib/analysis/excel-service";
 import { generateReport, generateReportFallback } from "@/lib/analysis/gemini-service";
+import { createJob, completeJob, failJob } from "@/lib/analysis/job-store";
+import type { AnalysisResult } from "@/lib/api";
 
 export const maxDuration = 120;
 
@@ -126,6 +128,51 @@ function buildIndicatorsFromData(summaryRaw: Record<string, number>): Indicator[
 interface Indicator { emoji: string; metric: string; result: string; evaluation: string }
 interface Insight { emoji: string; title: string; description: string; cause: string; action: string }
 
+async function runAnalysis(
+  jobId: string,
+  buffer: Buffer,
+  targetMonth: string,
+  nextMonthBusinessDays: number
+) {
+  let structuredData;
+  try {
+    structuredData = extractStructuredData(buffer, targetMonth || null, nextMonthBusinessDays);
+    const sr = structuredData.summary_raw as unknown as Record<string, number>;
+    console.log("[analyze] 매출 원본값:", {
+      total_sales: (sr.total_sales / 1e8).toFixed(2) + "억",
+      recruit_fee: (sr.recruit_fee / 1e8).toFixed(2) + "억",
+      flat_rate_fee: (sr.flat_rate_fee / 1e8).toFixed(2) + "억",
+      ad_sales: (sr.ad_sales / 1e8).toFixed(2) + "억",
+      refund: sr.refund_recruit_fee != null ? (sr.refund_recruit_fee / 1e8).toFixed(2) + "억" : "없음",
+      hire_cnt: sr.hire_cnt,
+    });
+  } catch (e) {
+    failJob(jobId, `엑셀 파싱 오류: ${e instanceof Error ? e.message : e}`);
+    return;
+  }
+
+  let markdown: string;
+  try {
+    console.log("[analyze] GEMINI_API_KEY:", process.env.GEMINI_API_KEY ? "설정됨" : "미설정");
+    markdown = await generateReport(structuredData);
+    console.log("[analyze] Gemini 리포트 생성 성공, 길이:", markdown.length);
+  } catch (e) {
+    console.error("[analyze] Gemini API 실패, fallback 사용:", e instanceof Error ? e.message : e);
+    markdown = generateReportFallback(structuredData);
+  }
+
+  const title = extractTitle(markdown);
+  const indicators = buildIndicatorsFromData(structuredData.summary_raw as unknown as Record<string, number>);
+  const { oneLiner } = extractExecutiveSummary(markdown);
+  const insights = extractInsights(markdown);
+
+  const result: AnalysisResult = {
+    report: { title, markdown, target_month: structuredData.target_month },
+    summary: { indicators, one_liner: oneLiner, insights },
+  };
+  completeJob(jobId, result);
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -138,41 +185,12 @@ export async function POST(request: Request) {
     const targetMonth = (formData.get("target_month") as string) || "";
     const nextMonthBusinessDays = Number(formData.get("next_month_business_days")) || 0;
 
-    let structuredData;
-    try {
-      structuredData = extractStructuredData(buffer, targetMonth || null, nextMonthBusinessDays);
-      const sr = structuredData.summary_raw as unknown as Record<string, number>;
-      console.log("[analyze] 매출 원본값:", {
-        total_sales: (sr.total_sales / 1e8).toFixed(2) + "억",
-        recruit_fee: (sr.recruit_fee / 1e8).toFixed(2) + "억",
-        flat_rate_fee: (sr.flat_rate_fee / 1e8).toFixed(2) + "억",
-        ad_sales: (sr.ad_sales / 1e8).toFixed(2) + "억",
-        refund: sr.refund_recruit_fee != null ? (sr.refund_recruit_fee / 1e8).toFixed(2) + "억" : "없음",
-        hire_cnt: sr.hire_cnt,
-      });
-    } catch (e) {
-      return NextResponse.json({ detail: `엑셀 파싱 오류: ${e instanceof Error ? e.message : e}` }, { status: 422 });
-    }
-
-    let markdown: string;
-    try {
-      console.log("[analyze] GEMINI_API_KEY:", process.env.GEMINI_API_KEY ? "설정됨" : "미설정");
-      markdown = await generateReport(structuredData);
-      console.log("[analyze] Gemini 리포트 생성 성공, 길이:", markdown.length);
-    } catch (e) {
-      console.error("[analyze] Gemini API 실패, fallback 사용:", e instanceof Error ? e.message : e);
-      markdown = generateReportFallback(structuredData);
-    }
-
-    const title = extractTitle(markdown);
-    const indicators = buildIndicatorsFromData(structuredData.summary_raw as unknown as Record<string, number>);
-    const { oneLiner } = extractExecutiveSummary(markdown);
-    const insights = extractInsights(markdown);
-
-    return NextResponse.json({
-      report: { title, markdown, target_month: structuredData.target_month },
-      summary: { indicators, one_liner: oneLiner, insights },
+    const job = createJob();
+    runAnalysis(job.id, buffer, targetMonth, nextMonthBusinessDays).catch((e) => {
+      failJob(job.id, `서버 오류: ${e instanceof Error ? e.message : e}`);
     });
+
+    return NextResponse.json({ jobId: job.id }, { status: 202 });
   } catch (e) {
     return NextResponse.json({ detail: `서버 오류: ${e instanceof Error ? e.message : e}` }, { status: 500 });
   }
