@@ -19,14 +19,21 @@ function baseUrl(): string {
   return (process.env.CONFLUENCE_URL || "").replace(/\/$/, "");
 }
 
+function macro(name: string, body: string, params: Record<string, string> = {}): string {
+  const paramStr = Object.entries(params)
+    .map(([k, v]) => `<ac:parameter ac:name="${k}">${v}</ac:parameter>`)
+    .join("");
+  return `<ac:structured-macro ac:name="${name}">${paramStr}<ac:rich-text-body>${body}</ac:rich-text-body></ac:structured-macro>`;
+}
+
 /**
  * 마크다운 → Confluence storage format 변환.
- * Fabric editor 호환을 위해 매크로/인라인 style 없이 기본 HTML만 사용.
+ * 블록쿼트/💡 인사이트를 Confluence 패널 매크로로 변환하여 시각적으로 정리.
  */
 export function convertMarkdownToConfluence(mdText: string): string {
   let html = marked.parse(mdText, { async: false, gfm: true }) as string;
 
-  // 코드 블록: <pre><code> 유지 (Confluence가 기본 지원)
+  // 코드 블록
   html = html.replace(
     /<pre><code(?:\s+class="language-(\w+)")?\s*>(.*?)<\/code><\/pre>/gs,
     (_, _lang, code) => `<pre>${code}</pre>`,
@@ -44,8 +51,41 @@ export function convertMarkdownToConfluence(mdText: string): string {
   html = html.replace(/<summary[^>]*>(.*?)<\/summary>/gs, "<strong>$1</strong>");
   html = html.replace(/<input[^>]*\/?>/g, "");
 
+  // ── Confluence 시각화 ──────────────────────────────────────────────
+
+  // 1. 테이블: Confluence 기본 테두리 스타일
+  html = html.replace(/<table>/g, '<table class="wrapped">');
+
+  // 2. 블록쿼트 → 패널 (⚠️ → warning, 나머지 → info)
+  html = html.replace(/<blockquote>([\s\S]*?)<\/blockquote>/g, (_, inner) => {
+    const trimmed = inner.trim();
+    if (trimmed.includes("⚠️")) return macro("warning", trimmed);
+    return macro("info", trimmed);
+  });
+
+  // 3. 💡 인사이트 단락 → tip 패널
+  html = html.replace(/<p>(💡[\s\S]*?)<\/p>/g, (_, inner) =>
+    macro("tip", `<p>${inner}</p>`)
+  );
+
+  // 4. Part A / Part B h2 앞에 컬러 구분 패널 타이틀 삽입
+  html = html.replace(
+    /(<h2>)(Part [AB]\..+?)(<\/h2>)/g,
+    (_, open, title, close) => {
+      const color = title.startsWith("Part A") ? "#0052CC" : "#00875A";
+      const divider = `<ac:structured-macro ac:name="panel"><ac:parameter ac:name="titleBGColor">${color}</ac:parameter><ac:parameter ac:name="titleColor">#FFFFFF</ac:parameter><ac:parameter ac:name="title">${title}</ac:parameter><ac:rich-text-body></ac:rich-text-body></ac:structured-macro>`;
+      return divider + open + title + close;
+    }
+  );
+
+  // 5. 문서 맨 앞에 목차(ToC) 삽입
+  const toc = '<ac:structured-macro ac:name="toc"><ac:parameter ac:name="minLevel">2</ac:parameter><ac:parameter ac:name="maxLevel">3</ac:parameter></ac:structured-macro>\n';
+  html = toc + html;
+
+  // ── 문자 정리 ───────────────────────────────────────────────────────
+
   // 이모지 variation selector 제거
-  html = html.replace(/[\ufe0f\ufe0e\u200d]/g, "");
+  html = html.replace(/[️︎‍]/g, "");
 
   // 제어 문자 제거
   // eslint-disable-next-line no-control-regex
