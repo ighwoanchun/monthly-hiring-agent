@@ -247,6 +247,7 @@ function formatRevenue(monthly: MonthlyRow[], targetMonth: Date): string {
     parts.push(`- ${label}: ₩${(val / 1e8).toFixed(1)}억 (${pct.toFixed(1)}%${momStr})`);
   }
 
+  let refundSection = "";
   if (row.refund_recruit_fee != null) {
     const refund = row.refund_recruit_fee;
     const refundAbs = Math.abs(refund);
@@ -265,11 +266,10 @@ function formatRevenue(monthly: MonthlyRow[], targetMonth: Date): string {
         refundLine += ` (전월 ₩${(prevRefund / 1e8).toFixed(1)}억 → 당월 ₩${(refundAbs / 1e8).toFixed(1)}억, ${refundChange >= 0 ? "+" : ""}${refundChange.toFixed(1)}% ${direction})`;
       }
     }
-    parts.push(refundLine);
-    parts.push(`- 수수료 순매출: ₩${(netRecruit / 1e8).toFixed(1)}억 (수수료 - 환불)`);
+    refundSection = `\n[환불 참고 — 매출 테이블 외 별도 표시]\n${refundLine}\n- 수수료 순매출: ₩${(netRecruit / 1e8).toFixed(1)}억 (수수료 - 환불)`;
   }
 
-  return "[매출 구조]\n" + parts.join("\n");
+  return "[매출 구조]\n" + parts.join("\n") + refundSection;
 }
 
 function formatJobAnalysis(
