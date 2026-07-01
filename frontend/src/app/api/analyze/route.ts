@@ -141,6 +141,15 @@ export async function POST(request: Request) {
     let structuredData;
     try {
       structuredData = extractStructuredData(buffer, targetMonth || null, nextMonthBusinessDays);
+      const sr = structuredData.summary_raw as Record<string, number>;
+      console.log("[analyze] 매출 원본값:", {
+        total_sales: (sr.total_sales / 1e8).toFixed(2) + "억",
+        recruit_fee: (sr.recruit_fee / 1e8).toFixed(2) + "억",
+        flat_rate_fee: (sr.flat_rate_fee / 1e8).toFixed(2) + "억",
+        ad_sales: (sr.ad_sales / 1e8).toFixed(2) + "억",
+        refund: sr.refund_recruit_fee != null ? (sr.refund_recruit_fee / 1e8).toFixed(2) + "억" : "없음",
+        hire_cnt: sr.hire_cnt,
+      });
     } catch (e) {
       return NextResponse.json({ detail: `엑셀 파싱 오류: ${e instanceof Error ? e.message : e}` }, { status: 422 });
     }
