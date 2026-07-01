@@ -1,5 +1,6 @@
 """분석 엔드포인트: 엑셀 업로드 → 리포트 생성."""
 
+import logging
 import re
 
 import numpy as np
@@ -7,6 +8,8 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 from services.excel_service import extract_structured_data
 from services.claude_service import generate_report, generate_report_fallback
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -223,7 +226,8 @@ async def analyze(
 
     try:
         markdown = generate_report(structured_data)
-    except Exception:
+    except Exception as e:
+        logger.error("Gemini API 호출 실패 — fallback 사용: %s: %s", type(e).__name__, e)
         markdown = generate_report_fallback(structured_data)
 
     title = _extract_title(markdown)
