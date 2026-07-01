@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-07-01T02:54:56.272Z",
+  "lastUpdated": "2026-07-01T09:30:23.371Z",
   "activeFeatures": [
     "backend",
     "__init__.py",
@@ -16,7 +16,8 @@
     "health",
     "analyze",
     "upload",
-    "notify"
+    "notify",
+    "[jobId]"
   ],
   "primaryFeature": "backend",
   "features": {
@@ -107,9 +108,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-23T01:06:12.720Z",
-        "lastUpdated": "2026-04-01T01:04:40.713Z"
+        "lastUpdated": "2026-07-01T09:30:23.371Z"
       },
-      "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/hooks/useAnalysis.ts"
+      "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/lib/api.ts"
     },
     "analyze_helpers.py": {
       "phase": "do",
@@ -133,9 +134,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-24T06:49:21.804Z",
-        "lastUpdated": "2026-07-01T02:17:11.698Z"
+        "lastUpdated": "2026-07-01T09:16:19.445Z"
       },
-      "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/lib/analysis/gemini-service.ts"
+      "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/lib/analysis/job-store.ts"
     },
     "confluence.ts": {
       "phase": "do",
@@ -185,7 +186,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-24T07:23:05.426Z",
-        "lastUpdated": "2026-07-01T02:54:56.272Z"
+        "lastUpdated": "2026-07-01T09:24:51.336Z"
       },
       "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/app/api/analyze/route.ts"
     },
@@ -214,6 +215,19 @@
         "lastUpdated": "2026-04-01T00:48:35.248Z"
       },
       "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/app/api/slack/notify/route.ts"
+    },
+    "[jobId]": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-07-01T09:30:12.799Z",
+        "lastUpdated": "2026-07-01T09:30:12.799Z"
+      },
+      "lastFile": "/Users/ighwoanchun/claude_test/monthly-hiring-agent/frontend/src/app/api/analyze/[jobId]/route.ts"
     }
   },
   "pipeline": {
@@ -224,7 +238,7 @@
   "session": {
     "startedAt": "2026-02-11T04:37:00.255Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-07-01T02:54:56.272Z"
+    "lastActivity": "2026-07-01T09:30:23.371Z"
   },
   "history": [
     {
@@ -1448,6 +1462,36 @@
     {
       "timestamp": "2026-07-01T02:54:56.272Z",
       "feature": "analyze",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-01T09:16:19.445Z",
+      "feature": "analysis",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-01T09:18:37.727Z",
+      "feature": "analyze",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-01T09:24:51.336Z",
+      "feature": "analyze",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-01T09:30:12.799Z",
+      "feature": "[jobId]",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-01T09:30:23.371Z",
+      "feature": "frontend",
       "phase": "do",
       "action": "updated"
     }
