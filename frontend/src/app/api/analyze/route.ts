@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     let structuredData;
     try {
       structuredData = extractStructuredData(buffer, targetMonth || null, nextMonthBusinessDays);
-      const sr = structuredData.summary_raw as Record<string, number>;
+      const sr = structuredData.summary_raw as unknown as Record<string, number>;
       console.log("[analyze] 매출 원본값:", {
         total_sales: (sr.total_sales / 1e8).toFixed(2) + "억",
         recruit_fee: (sr.recruit_fee / 1e8).toFixed(2) + "억",
