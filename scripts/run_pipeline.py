@@ -3,7 +3,8 @@
 월간 채용 리포트 자동화 파이프라인
 
 1. 마크다운 리포트 → Confluence 업로드 (생성 또는 업데이트)
-2. Executive Summary 추출 → Slack 알림
+2. Confluence 페이지 → PDF 아카이브 (archive/pdf/{월}.pdf 누적)
+3. Executive Summary 추출 → Slack 알림
 
 사용법:
     # .env 파일 설정 후 실행
@@ -18,6 +19,7 @@ import re
 import sys
 import json
 import ssl
+import subprocess
 import urllib.request
 import urllib.error
 import base64
@@ -124,6 +126,14 @@ def find_latest_report(report_path=None):
         print(f"[ERROR] output/ 디렉토리에 마크다운 파일이 없습니다.")
         sys.exit(1)
     return md_files[0]
+
+
+def extract_report_month(report_filename):
+    """리포트 파일명(예: 2026년_6월_월간_채용_분석_리포트.md)에서 YYYY-MM을 추출합니다."""
+    m = re.search(r"(\d{4})년_(\d{1,2})월", report_filename)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}"
+    return "unknown"
 
 
 def extract_title(md_text):
@@ -423,7 +433,6 @@ def find_latest_excel():
 
 def generate_report_with_claude(excel_file, target_month=None):
     """Claude Code CLI를 호출하여 엑셀 데이터를 분석하고 리포트를 생성합니다."""
-    import subprocess
     from datetime import datetime
 
     if target_month is None:
@@ -490,6 +499,7 @@ def main():
     parser.add_argument("--month", "-m", help="분석 대상월 (예: '2026년 1월')")
     parser.add_argument("--skip-analysis", action="store_true", help="리포트 생성 건너뛰고 기존 파일 사용")
     parser.add_argument("--skip-confluence", action="store_true", help="Confluence 업로드 건너뛰기")
+    parser.add_argument("--skip-pdf", action="store_true", help="PDF 아카이브 건너뛰기")
     parser.add_argument("--skip-slack", action="store_true", help="Slack 알림 건너뛰기")
     args = parser.parse_args()
 
@@ -503,48 +513,66 @@ def main():
     # Step 1: 리포트 생성 (Claude Code CLI)
     if args.file or args.skip_analysis:
         report_file = find_latest_report(args.file)
-        print(f"[1/5] 기존 리포트 사용: {report_file.name}")
+        print(f"[1/6] 기존 리포트 사용: {report_file.name}")
     else:
-        print(f"[1/5] 엑셀 분석 → 리포트 생성 (Claude Code)")
+        print(f"[1/6] 엑셀 분석 → 리포트 생성 (Claude Code)")
         excel_file = find_latest_excel()
         report_file = generate_report_with_claude(excel_file, args.month)
         print(f"  ✅ 리포트 생성 완료: {report_file.name}")
     print()
 
     # Step 2: 리포트 읽기
-    print(f"[2/5] 리포트 읽기: {report_file.name}")
+    print(f"[2/6] 리포트 읽기: {report_file.name}")
     md_text = report_file.read_text(encoding="utf-8")
     title = extract_title(md_text)
+    report_month = extract_report_month(report_file.name)
     print(f"  제목: {title}")
     print()
 
     # Step 3: Confluence 업로드
     confluence_url = ""
+    page_id = ""
     if not args.skip_confluence:
-        print(f"[3/5] Confluence 업로드 중...")
+        print(f"[3/6] Confluence 업로드 중...")
         confluence_html = convert_markdown_to_confluence(md_text)
         page_id, confluence_url = confluence_upload(title, confluence_html)
         print(f"  ✅ 완료 — Page ID: {page_id}")
         print(f"  🔗 {confluence_url}")
     else:
-        print("[3/5] Confluence 업로드 건너뜀")
+        print("[3/6] Confluence 업로드 건너뜀")
     print()
 
-    # Step 4: Executive Summary 추출
-    print(f"[4/5] Executive Summary 추출 중...")
+    # Step 4: PDF 아카이브 (Confluence 페이지 → archive/pdf/{월}.pdf)
+    if not args.skip_pdf and page_id:
+        print(f"[4/6] PDF 아카이브 중...")
+        pdf_result = subprocess.run(
+            [sys.executable, str(SCRIPT_DIR / "export_pdf.py"),
+             "--page-id", page_id, "--month", report_month],
+            cwd=str(PROJECT_DIR), capture_output=True, text=True,
+        )
+        if pdf_result.returncode == 0:
+            print(f"  {pdf_result.stdout.strip()}")
+        else:
+            print(f"  [WARN] PDF 아카이브 실패 (파이프라인은 계속 진행): {pdf_result.stderr[:300]}")
+    else:
+        print("[4/6] PDF 아카이브 건너뜀" + ("" if args.skip_pdf else " (Confluence 업로드 건너뜀으로 인해)"))
+    print()
+
+    # Step 5: Executive Summary 추출
+    print(f"[5/6] Executive Summary 추출 중...")
     indicators, one_liner = extract_executive_summary(md_text)
     print(f"  지표 {len(indicators)}개 추출")
     if one_liner:
         print(f"  요약: {one_liner[:60]}...")
     print()
 
-    # Step 5: Slack 알림
+    # Step 6: Slack 알림
     if not args.skip_slack:
-        print(f"[5/5] Slack 알림 전송 중... (채널: {SLACK_CHANNEL_ID})")
+        print(f"[6/6] Slack 알림 전송 중... (채널: {SLACK_CHANNEL_ID})")
         ts = send_slack_message(indicators, one_liner, confluence_url, title)
         print(f"  ✅ 완료 — ts: {ts}")
     else:
-        print("[5/5] Slack 알림 건너뜀")
+        print("[6/6] Slack 알림 건너뜀")
 
     print()
     print("=" * 60)
@@ -552,6 +580,7 @@ def main():
     print("=" * 60)
     if confluence_url:
         print(f"  📄 Confluence: {confluence_url}")
+    print(f"  🗂  PDF 아카이브: archive/pdf/{report_month}.pdf")
     print(f"  💬 Slack: #{SLACK_CHANNEL_ID}")
     print()
 
